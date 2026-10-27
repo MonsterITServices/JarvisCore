@@ -1,0 +1,1003 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101615">
+  <title>Jarvis | Personal Systems</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #101615;
+      --panel: #171f1d;
+      --panel-raised: #1c2623;
+      --line: #2b3934;
+      --text: #edf2ed;
+      --muted: #8d9d94;
+      --mint: #b9f27c;
+      --cyan: #78d8c3;
+      --amber: #e9b86b;
+      --red: #ef8271;
+      --mono: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+      --display: "Baskerville", "Palatino Linotype", Georgia, serif;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-width: 320px;
+      min-height: 100vh;
+      color: var(--text);
+      background-color: var(--bg);
+      background-image: radial-gradient(ellipse at 17% 0%, rgba(76, 116, 89, .17), transparent 38%),
+        linear-gradient(rgba(195, 224, 204, .025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(195, 224, 204, .025) 1px, transparent 1px);
+      background-size: auto, 36px 36px, 36px 36px;
+      font-family: var(--mono);
+      font-size: 13px;
+    }
+
+    button, input { font: inherit; }
+    button { color: inherit; }
+    .shell { max-width: 1540px; min-height: 100vh; margin: 0 auto; padding: 0 42px; }
+    .topbar {
+      height: 82px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--line);
+    }
+    .brand { display: flex; gap: 13px; align-items: center; }
+    .brand-mark {
+      position: relative;
+      width: 32px;
+      aspect-ratio: 1;
+      border: 1px solid var(--mint);
+      border-radius: 50%;
+      box-shadow: inset 0 0 12px rgba(185, 242, 124, .12), 0 0 16px rgba(185, 242, 124, .12);
+    }
+    .brand-mark::before, .brand-mark::after { content: ""; position: absolute; background: var(--mint); }
+    .brand-mark::before { width: 1px; height: 18px; left: 15px; top: 6px; }
+    .brand-mark::after { height: 1px; width: 18px; top: 15px; left: 6px; }
+    .brand-name { font-family: var(--display); font-size: 22px; letter-spacing: 0; }
+    .brand-sub { color: var(--muted); font-size: 10px; margin-top: 4px; letter-spacing: .08em; text-transform: uppercase; }
+    .top-meta { display: flex; align-items: center; gap: 28px; color: var(--muted); font-size: 11px; }
+    .online { display: inline-flex; align-items: center; gap: 8px; color: var(--mint); }
+    .online-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; box-shadow: 0 0 11px currentColor; }
+    .layout { padding: 40px 0 30px; }
+    .intro { display: flex; align-items: end; justify-content: space-between; margin-bottom: 27px; }
+    .intro-actions { display: flex; align-items: center; gap: 14px; }
+    .eyebrow { color: var(--cyan); font-size: 10px; letter-spacing: .16em; text-transform: uppercase; }
+    h1 { margin: 8px 0 0; font: 400 36px/1.15 var(--display); letter-spacing: 0; }
+    .intro-note { color: var(--muted); font-size: 11px; }
+    .dashboard { display: grid; grid-template-columns: minmax(0, 1.07fr) minmax(360px, .93fr); gap: 18px; align-items: stretch; }
+    .panel { min-width: 0; border: 1px solid var(--line); background: rgba(23, 31, 29, .92); }
+    .system-panel { min-height: 690px; position: relative; display: flex; flex-direction: column; overflow: hidden; }
+    .panel-heading { min-height: 55px; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; border-bottom: 1px solid var(--line); }
+    .panel-title { font-size: 10px; text-transform: uppercase; letter-spacing: .12em; }
+    .panel-index { color: var(--muted); font-size: 10px; }
+    .core-area {
+      flex: 1;
+      min-height: 360px;
+      display: grid;
+      place-items: center;
+      position: relative;
+      background: radial-gradient(ellipse at center, rgba(71, 135, 103, .13), transparent 53%);
+    }
+    .core {
+      width: min(57vw, 320px);
+      max-width: 320px;
+      aspect-ratio: 1;
+      position: relative;
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      border: 1px solid rgba(185, 242, 124, .3);
+      box-shadow: 0 0 42px rgba(86, 194, 150, .08), inset 0 0 38px rgba(86, 194, 150, .07);
+      animation: arrive .9s ease-out both;
+    }
+    .core::before, .core::after { content: ""; position: absolute; inset: 17px; border-radius: 50%; border: 1px dashed rgba(120, 216, 195, .36); }
+    .core::after { inset: 39px; border-style: solid; border-color: rgba(185, 242, 124, .23); }
+    .core-ring { position: absolute; inset: -13px; border-radius: 50%; border: 1px solid transparent; border-top-color: rgba(120, 216, 195, .6); border-bottom-color: rgba(120, 216, 195, .2); animation: orbit 18s linear infinite; }
+    .core-ring:nth-child(2) { inset: 8px; transform: rotate(67deg); animation-duration: 24s; animation-direction: reverse; border-top-color: rgba(185, 242, 124, .45); }
+    .core-ring:nth-child(3) { inset: 57px; border-left-color: rgba(120, 216, 195, .3); border-top-color: transparent; animation-duration: 30s; }
+    .core-center { width: 95px; aspect-ratio: 1; display: grid; place-items: center; border: 1px solid rgba(185, 242, 124, .65); border-radius: 50%; color: var(--mint); background: rgba(185, 242, 124, .055); box-shadow: 0 0 40px rgba(185, 242, 124, .15); }
+    .core-center span { font: 400 33px var(--display); }
+    .core-caption { position: absolute; bottom: 30px; color: var(--muted); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; }
+    .telemetry { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--line); }
+    .metric { min-height: 83px; padding: 17px 20px; border-right: 1px solid var(--line); }
+    .metric:last-child { border-right: 0; }
+    .metric-label { color: var(--muted); font-size: 9px; text-transform: uppercase; letter-spacing: .1em; }
+    .metric-value { margin-top: 11px; font-family: var(--display); font-size: 19px; }
+    .metric-value small { color: var(--muted); font: 10px var(--mono); }
+    .devices { border-top: 1px solid var(--line); padding: 18px 20px 20px; }
+    .devices-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    .devices-head span:first-child { font-size: 10px; text-transform: uppercase; letter-spacing: .1em; }
+    .simulated { color: var(--amber); font-size: 9px; text-transform: uppercase; letter-spacing: .09em; }
+    .device-list { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .device { display: flex; align-items: center; justify-content: space-between; padding: 12px; background: var(--panel-raised); border: 1px solid rgba(43, 57, 52, .8); }
+    .device-name { color: var(--muted); font-size: 10px; }
+    .device-value { color: var(--text); font-size: 11px; margin-top: 5px; }
+    .device-state { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+    .device-state.active { background: var(--mint); box-shadow: 0 0 10px var(--mint); }
+    .integration-list { display: grid; gap: 8px; margin-top: 16px; padding-top: 13px; border-top: 1px solid var(--line); }
+    .integration-row { display: flex; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 9px; text-transform: uppercase; letter-spacing: .07em; }
+    .integration-state { color: var(--cyan); text-align: right; }
+    .integration-state.unavailable { color: var(--amber); }
+    .knowledge-library { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
+    .knowledge-heading { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .knowledge-title { font-size: 10px; text-transform: uppercase; letter-spacing: .1em; }
+    .knowledge-count { display: block; margin-top: 5px; color: var(--muted); font-size: 9px; }
+    .knowledge-form { display: flex; gap: 6px; margin-top: 10px; }
+    .knowledge-url { min-width: 0; flex: 1; height: 34px; padding: 0 8px; border: 1px solid var(--line); outline: none; background: #111816; color: var(--text); font-size: 10px; }
+    .knowledge-url:focus { border-color: var(--cyan); }
+    .knowledge-add { padding: 0 9px; border: 1px solid var(--line); background: var(--panel-raised); color: var(--cyan); cursor: pointer; font-size: 9px; }
+    .knowledge-note { min-height: 22px; margin-top: 8px; color: var(--muted); font-size: 9px; line-height: 1.5; }
+    .knowledge-list { display: grid; gap: 6px; max-height: 170px; overflow-y: auto; }
+    .knowledge-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px; background: var(--panel-raised); border: 1px solid rgba(43, 57, 52, .8); }
+    .knowledge-item-title { min-width: 0; color: var(--text); font-size: 9px; overflow-wrap: anywhere; }
+    .knowledge-item-source { margin-top: 4px; color: var(--muted); font-size: 8px; overflow-wrap: anywhere; }
+    .knowledge-delete { flex: 0 0 auto; padding: 5px 7px; border: 1px solid var(--line); background: transparent; color: var(--amber); cursor: pointer; font-size: 9px; }
+    .security-center { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
+    .security-heading { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .security-title { font-size: 10px; text-transform: uppercase; letter-spacing: .1em; }
+    .security-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+    .security-button { min-height: 30px; padding: 0 8px; border: 1px solid var(--line); background: var(--panel-raised); color: var(--cyan); cursor: pointer; font-size: 9px; }
+    .security-button:disabled { opacity: .55; cursor: wait; }
+    .security-site-form { display: flex; gap: 6px; margin-top: 8px; }
+    .security-site-url { min-width: 0; flex: 1; height: 32px; padding: 0 8px; border: 1px solid var(--line); outline: none; background: #111816; color: var(--text); font-size: 9px; }
+    .security-site-url:focus { border-color: var(--cyan); }
+    .security-note { min-height: 22px; margin-top: 8px; color: var(--muted); font-size: 8px; line-height: 1.5; }
+    .security-results { display: grid; gap: 5px; max-height: 220px; overflow-y: auto; margin-top: 8px; }
+    .security-result { display: flex; justify-content: space-between; align-items: start; gap: 10px; padding: 8px; border: 1px solid var(--line); background: #131b18; }
+    .security-result-name { color: var(--text); font-size: 9px; }
+    .security-result-detail { margin-top: 4px; color: var(--muted); font-size: 8px; line-height: 1.5; }
+    .security-result-status { flex: 0 0 auto; font-size: 8px; text-transform: uppercase; }
+    .security-result-status.pass { color: var(--mint); }
+    .security-result-status.review { color: var(--amber); }
+    .security-result-status.fail { color: var(--red); }
+    .code-workbench { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
+    .code-workbench-title { font-size: 10px; text-transform: uppercase; letter-spacing: .1em; }
+    .code-workbench-note { margin-top: 6px; color: var(--muted); font-size: 8px; line-height: 1.6; }
+    .code-workbench-form { display: grid; gap: 7px; margin-top: 10px; }
+    .code-path, .code-instruction { width: 100%; padding: 8px; border: 1px solid var(--line); outline: none; background: #111816; color: var(--text); font: 10px/1.5 var(--mono); }
+    .code-path { height: 34px; }
+    .code-instruction { min-height: 80px; resize: vertical; }
+    .code-path:focus, .code-instruction:focus { border-color: var(--cyan); }
+    .code-workbench-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+    .code-diff { max-height: 300px; overflow: auto; margin: 8px 0 0; padding: 10px; border: 1px solid var(--line); background: #0d1311; color: #d8e2db; font: 9px/1.6 var(--mono); white-space: pre; }
+    .ha-devices { display: grid; gap: 8px; margin-top: 12px; }
+    .ha-device { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; padding: 10px; border: 1px solid var(--line); background: #131b18; }
+    .ha-name { min-width: 130px; color: var(--text); font-size: 10px; overflow-wrap: anywhere; }
+    .ha-controls { display: flex; align-items: center; gap: 6px; }
+    .ha-control { padding: 6px 8px; border: 1px solid var(--line); background: transparent; color: var(--cyan); cursor: pointer; font-size: 9px; }
+    .ha-control:hover { border-color: var(--cyan); }
+    .ha-temperature { width: 66px; padding: 6px; border: 1px solid var(--line); background: var(--bg); color: var(--text); }
+    .action-dialog { width: min(440px, calc(100vw - 32px)); padding: 24px; border: 1px solid var(--line); background: var(--panel); color: var(--text); }
+    .action-dialog::backdrop { background: rgba(6, 11, 9, .78); backdrop-filter: blur(3px); }
+    .action-dialog h2 { margin: 0 0 12px; font: 400 22px var(--display); }
+    .action-dialog p { margin: 0; color: #c2cec6; font: 11px/1.7 var(--mono); overflow-wrap: anywhere; }
+    .action-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 22px; }
+    .action-dialog-actions button { min-height: 38px; padding: 0 12px; border: 1px solid var(--line); background: transparent; cursor: pointer; font-size: 10px; }
+    .action-dialog-actions button:last-child { border-color: var(--mint); background: var(--mint); color: var(--bg); }
+    .rules-dialog { width: min(680px, calc(100vw - 32px)); max-width: none; padding: 24px; border: 1px solid var(--line); background: var(--panel); color: var(--text); }
+    .rules-dialog::backdrop { background: rgba(6, 11, 9, .78); backdrop-filter: blur(3px); }
+    .rules-dialog h2 { margin: 0 0 8px; font: 400 25px var(--display); }
+    .rules-description { margin: 0 0 17px; color: var(--muted); font-size: 10px; line-height: 1.7; }
+    .rules-label { display: block; margin-bottom: 8px; color: var(--cyan); font-size: 10px; text-transform: uppercase; }
+    .rules-input { width: 100%; min-height: 210px; resize: vertical; padding: 13px; border: 1px solid var(--line); outline: none; background: #111816; color: var(--text); font: 12px/1.6 var(--mono); }
+    .rules-input:focus { border-color: var(--cyan); }
+    .rules-status { min-height: 20px; margin-top: 8px; color: var(--muted); font-size: 9px; }
+    .rules-actions { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 8px; }
+    .rules-count { color: var(--muted); font-size: 9px; }
+    .chat-panel { min-height: 690px; display: flex; flex-direction: column; }
+    .chat-header { min-height: 55px; display: flex; align-items: center; justify-content: space-between; padding: 0 18px; border-bottom: 1px solid var(--line); }
+    .assistant-state { display: flex; gap: 9px; align-items: center; color: var(--muted); font-size: 10px; }
+    .model-badge { margin-left: auto; margin-right: 15px; color: var(--cyan); font-size: 9px; text-align: right; }
+    .model-badge.unavailable { color: var(--amber); }
+    .conversation { flex: 1; min-height: 260px; max-height: 430px; overflow-y: auto; padding: 21px 18px; scrollbar-color: #40534a transparent; }
+    .message { display: grid; grid-template-columns: 27px minmax(0, 1fr); gap: 10px; margin-bottom: 19px; animation: arrive .25s ease-out both; }
+    .message-mark { width: 25px; height: 25px; display: grid; place-items: center; border: 1px solid var(--line); color: var(--cyan); font-size: 9px; }
+    .message.user .message-mark { color: var(--mint); border-color: rgba(185, 242, 124, .3); }
+    .message-meta { margin: 1px 0 7px; color: var(--muted); font-size: 9px; text-transform: uppercase; letter-spacing: .1em; }
+    .message-text { color: #d8e2db; font: 12px/1.7 var(--mono); overflow-wrap: anywhere; }
+    .message-sources { display: grid; gap: 5px; margin-top: 10px; }
+    .message-source { color: var(--cyan); font-size: 10px; line-height: 1.5; text-decoration: underline; text-underline-offset: 3px; overflow-wrap: anywhere; }
+    .quick-actions { padding: 14px 18px; border-top: 1px solid var(--line); }
+    .quick-label { margin-bottom: 10px; color: var(--muted); font-size: 9px; text-transform: uppercase; letter-spacing: .1em; }
+    .quick-list { display: flex; flex-wrap: wrap; gap: 7px; }
+    .quick-button { padding: 8px 10px; border: 1px solid var(--line); background: transparent; color: #b5c4ba; cursor: pointer; font-size: 10px; transition: border-color .15s, color .15s, background .15s; }
+    .quick-button:hover { border-color: var(--cyan); color: var(--cyan); background: rgba(120, 216, 195, .05); }
+    .composer { padding: 13px 15px 15px; border-top: 1px solid var(--line); }
+    .input-row { display: flex; align-items: center; gap: 8px; }
+    .command-input { min-width: 0; flex: 1; height: 43px; padding: 0 12px; outline: none; border: 1px solid var(--line); background: #111816; color: var(--text); font-size: 11px; }
+    .command-input:focus { border-color: rgba(120, 216, 195, .7); }
+    .icon-button, .send-button { flex: 0 0 auto; height: 43px; min-width: 43px; display: grid; place-items: center; border: 1px solid var(--line); background: var(--panel-raised); cursor: pointer; transition: .16s ease; }
+    .icon-button:hover, .send-button:hover { border-color: var(--mint); color: var(--mint); }
+    .icon-button[aria-pressed="true"] { border-color: var(--red); color: var(--red); box-shadow: 0 0 13px rgba(239, 130, 113, .13); }
+    .send-button { min-width: 68px; color: var(--bg); border-color: var(--mint); background: var(--mint); font-size: 10px; text-transform: uppercase; }
+    .send-button:hover { color: var(--bg); background: #caf99a; }
+    .voice-note { margin: 10px 0 0; color: var(--muted); font-size: 9px; line-height: 1.5; }
+    .footer { display: flex; justify-content: space-between; gap: 14px; padding-top: 16px; color: var(--muted); font-size: 9px; }
+    .footer strong { color: var(--amber); font-weight: 400; }
+    .hidden { display: none; }
+    @keyframes orbit { to { transform: rotate(360deg); } }
+    @keyframes arrive { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: translateY(0); } }
+
+    @media (max-width: 900px) {
+      .shell { padding: 0 22px; }
+      .dashboard { grid-template-columns: minmax(0, 1fr) minmax(320px, .9fr); gap: 12px; }
+      .system-panel, .chat-panel { min-height: 660px; }
+      .metric { padding-left: 13px; padding-right: 10px; }
+    }
+    @media (max-width: 700px) {
+      .shell { padding: 0 15px; }
+      .topbar { height: 70px; }
+      .top-meta { gap: 12px; font-size: 9px; }
+      .top-meta .local-label { display: none; }
+      .layout { padding-top: 27px; }
+      .intro { align-items: start; gap: 12px; flex-direction: column; margin-bottom: 19px; }
+      .intro-actions { width: 100%; justify-content: space-between; flex-wrap: wrap; }
+      h1 { font-size: 32px; }
+      .dashboard { grid-template-columns: minmax(0, 1fr); }
+      .system-panel { min-height: 570px; }
+      .chat-panel { min-height: 620px; }
+      .core-area { min-height: 310px; }
+      .core { width: min(66vw, 275px); }
+      .telemetry .metric { min-height: 74px; padding: 13px 10px; }
+      .metric-value { font-size: 16px; }
+      .footer { flex-direction: column; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true"></div>
+        <div><div class="brand-name">Jarvis</div><div class="brand-sub">Personal systems interface</div></div>
+      </div>
+      <div class="top-meta">
+        <span class="local-label">LOCAL SESSION</span>
+        <span id="clock">--:--:--</span>
+        <span class="online"><span class="online-dot"></span><span id="connection-label">CONNECTING</span></span>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="intro">
+        <div><div class="eyebrow">Personal command interface / 01</div><h1>Good to have you back.</h1></div>
+        <div class="intro-actions"><div class="intro-note">Listening is always initiated by you.</div><button class="quick-button" id="rules-button" type="button">Edit hard rules</button></div>
+      </section>
+
+      <div class="dashboard">
+        <section class="panel system-panel" aria-label="System status">
+          <div class="panel-heading"><span class="panel-title">Core systems</span><span class="panel-index">LOCAL / 001</span></div>
+          <div class="core-area">
+            <div class="core" aria-hidden="true">
+              <div class="core-ring"></div><div class="core-ring"></div><div class="core-ring"></div>
+              <div class="core-center"><span>J</span></div>
+            </div>
+            <div class="core-caption" id="core-caption">Awaiting your instruction</div>
+          </div>
+          <div class="telemetry">
+            <div class="metric"><div class="metric-label">Connection</div><div class="metric-value" id="metric-connection">--</div></div>
+            <div class="metric"><div class="metric-label">Voice input</div><div class="metric-value" id="metric-voice">--</div></div>
+            <div class="metric"><div class="metric-label">Operating mode</div><div class="metric-value"><small>LOCAL</small></div></div>
+          </div>
+          <div class="devices">
+            <div class="devices-head"><span>Device simulations</span><span class="simulated">Test controls</span></div>
+            <div class="device-list">
+              <div class="device"><div><div class="device-name">LIGHTS</div><div class="device-value" id="light-value">OFF</div></div><span class="device-state" id="light-indicator"></span></div>
+              <div class="device"><div><div class="device-name">THERMOSTAT</div><div class="device-value" id="thermostat-value">20 C</div></div><span class="device-state" id="thermostat-indicator"></span></div>
+            </div>
+            <div class="integration-list">
+              <div class="integration-row"><span>On-demand web</span><span class="integration-state unavailable" id="internet-status">Checking</span></div>
+              <div class="integration-row"><span>Home Assistant</span><span class="integration-state unavailable" id="home-assistant-status">Not connected</span></div>
+            </div>
+            <div class="ha-devices" id="home-assistant-devices" aria-live="polite"></div>
+            <section class="knowledge-library" aria-label="Saved knowledge">
+              <div class="knowledge-heading">
+                <div><div class="knowledge-title">Saved knowledge</div><div class="knowledge-count" id="knowledge-count">Loading library...</div></div>
+                <button class="knowledge-add" id="knowledge-file-button" type="button">Import file</button>
+                <input class="hidden" id="knowledge-file" type="file" accept=".txt,.md,.markdown,.html,.htm,.csv,.pdf,.docx,.pptx,.xlsx,.png,.jpg,.jpeg,.gif,.bmp,.tif,.tiff,.webp">
+              </div>
+              <form class="knowledge-form" id="knowledge-url-form">
+                <input class="knowledge-url" id="knowledge-url" type="url" placeholder="HTTPS page URL" aria-label="Webpage URL to remember">
+                <button class="knowledge-add" type="submit">Remember page</button>
+              </form>
+              <div class="knowledge-note" id="knowledge-note" aria-live="polite">Extracted text is stored locally; uploaded originals are not kept.</div>
+              <div class="knowledge-list" id="knowledge-list"></div>
+            </section>
+            <section class="security-center" aria-label="Security center">
+              <div class="security-heading"><span class="security-title">Security center</span><span class="knowledge-count" id="security-summary">Not checked</span></div>
+              <div class="security-actions">
+                <button class="security-button" id="security-self-audit" type="button">Run self-audit</button>
+                <button class="security-button" id="security-dependency-audit" type="button">Audit packages</button>
+              </div>
+              <form class="security-site-form" id="security-site-form">
+                <input class="security-site-url" id="security-site-url" type="url" placeholder="Authorized HTTPS domain" aria-label="Authorized HTTPS domain to check">
+                <button class="security-button" id="security-site-check" type="submit">Check headers</button>
+              </form>
+              <div class="security-note">Self-audit checks Jarvis only. Package audit sends installed package names and versions to the public advisory service.</div>
+              <div class="security-results" id="security-results" aria-live="polite"></div>
+            </section>
+            <section class="code-workbench" aria-label="Code workbench">
+              <div class="code-workbench-title">Code workbench</div>
+              <div class="code-workbench-note" id="code-workbench-location">Loading code workspace...</div>
+              <div class="code-workbench-note">Lua, PHP, JavaScript, C/C++, Python. Drafts use local Ollama, show a diff, and are never executed. Jarvis core files stay outside this workspace.</div>
+              <form class="code-workbench-form" id="code-workbench-form">
+                <input class="code-path" id="code-path" type="text" maxlength="500" placeholder="Project-relative path, e.g. hello.lua" aria-label="Project-relative source file path">
+                <textarea class="code-instruction" id="code-instruction" maxlength="2000" placeholder="Describe the change you want..." aria-label="Requested source change"></textarea>
+                <div class="code-workbench-actions">
+                  <button class="security-button" id="code-draft-button" type="submit">Draft diff</button>
+                  <button class="security-button" id="code-apply-button" type="button" disabled>Apply reviewed diff</button>
+                </div>
+              </form>
+              <div class="security-note" id="code-workbench-status" aria-live="polite">Applying creates a backup. Generated code is not run automatically.</div>
+              <pre class="code-diff hidden" id="code-diff" aria-label="Proposed unified diff"></pre>
+            </section>
+          </div>
+        </section>
+
+        <section class="panel chat-panel" aria-label="Jarvis conversation">
+          <div class="chat-header">
+            <span class="panel-title">Conversation</span>
+            <span class="model-badge" id="model-badge" title="Checking configured AI provider">AI / CHECKING</span>
+            <span class="assistant-state"><span class="online-dot"></span><span id="assistant-state">READY</span></span>
+          </div>
+          <div class="conversation" id="conversation" aria-live="polite" aria-relevant="additions">
+            <div class="message">
+              <div class="message-mark">J</div>
+              <div><div class="message-meta">Jarvis / now</div><div class="message-text">Systems are online. Ask a question, request current information, or name an allowlisted Home Assistant device. Say “help” for details.</div></div>
+            </div>
+          </div>
+          <div class="quick-actions">
+            <div class="quick-label">Quick commands</div>
+            <div class="quick-list">
+              <button class="quick-button" type="button" data-command="What time is it?">Time</button>
+              <button class="quick-button" type="button" data-command="simulate lights on">Test lights on</button>
+              <button class="quick-button" type="button" data-command="simulate lights off">Test lights off</button>
+              <button class="quick-button" type="button" data-command="simulate thermostat to 22">Test 22 C</button>
+            </div>
+          </div>
+          <form class="composer" id="command-form">
+            <div class="input-row">
+              <input class="command-input" id="command-input" type="text" maxlength="1000" placeholder="Ask Jarvis something..." autocomplete="off" aria-label="Message Jarvis">
+              <button class="icon-button" id="voice-button" type="button" aria-label="Start voice input" title="Start voice input" aria-pressed="false">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"></rect><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3m-4 0h8"></path></svg>
+              </button>
+              <button class="send-button" type="submit">Send</button>
+            </div>
+            <div class="voice-note" id="voice-note">Voice recognition availability depends on your browser. Microphone access is requested only when you press the mic button.</div>
+          </form>
+        </section>
+      </div>
+      <footer class="footer"><span><strong>LOCAL MODEL</strong> / Web searches and approved device actions run only when requested.</span><span>Voice recognition may be processed by your browser's speech service.</span></footer>
+    </main>
+  </div>
+  <dialog class="action-dialog" id="action-dialog" aria-labelledby="action-dialog-title" aria-describedby="action-dialog-description">
+    <h2 id="action-dialog-title">Confirm device action</h2>
+    <p id="action-dialog-description"></p>
+    <div class="action-dialog-actions">
+      <button type="button" id="action-cancel">Cancel</button>
+      <button type="button" id="action-confirm">Confirm action</button>
+    </div>
+  </dialog>
+  <dialog class="rules-dialog" id="rules-dialog" aria-labelledby="rules-dialog-title">
+    <h2 id="rules-dialog-title">Jarvis hard rules</h2>
+    <p class="rules-description">These owner-authored instructions are sent to the local model ahead of conversation and web content. Webpages and quoted text cannot replace them. Model/runtime safety limits still apply.</p>
+    <label class="rules-label" for="hard-rules-input">Owner rules</label>
+    <textarea class="rules-input" id="hard-rules-input" maxlength="8000" spellcheck="true"></textarea>
+    <div class="rules-actions"><span class="rules-count" id="rules-count">0 / 8000</span><div class="action-dialog-actions"><button type="button" id="rules-cancel">Cancel</button><button type="button" id="rules-save">Save rules</button></div></div>
+    <div class="rules-status" id="rules-status" aria-live="polite"></div>
+  </dialog>
+
+  <script>
+    const conversation = document.getElementById('conversation');
+    const commandInput = document.getElementById('command-input');
+    const form = document.getElementById('command-form');
+    const voiceButton = document.getElementById('voice-button');
+    const recognitionType = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const recognition = recognitionType ? new recognitionType() : null;
+    let isListening = false;
+    const conversationHistory = [];
+    let resolveActionConfirmation = null;
+    let currentCodeDraftId = null;
+    const rulesDialog = document.getElementById('rules-dialog');
+    const rulesInput = document.getElementById('hard-rules-input');
+    const rulesStatus = document.getElementById('rules-status');
+    const knowledgeNote = document.getElementById('knowledge-note');
+
+    if (recognition) {
+      recognition.lang = 'en-US';
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 1;
+    } else {
+      voiceButton.disabled = true;
+      voiceButton.title = 'Voice recognition is not supported in this browser';
+      voiceButton.setAttribute('aria-label', 'Voice recognition is not supported');
+      document.getElementById('voice-note').textContent = 'Voice recognition is not supported by this browser. You can still chat using the text field.';
+      document.getElementById('metric-voice').textContent = 'N/A';
+    }
+
+    function setListening(listening) {
+      isListening = listening;
+      voiceButton.setAttribute('aria-pressed', String(listening));
+      voiceButton.title = listening ? 'Stop voice input' : 'Start voice input';
+      document.getElementById('assistant-state').textContent = listening ? 'LISTENING' : 'READY';
+      document.getElementById('core-caption').textContent = listening ? 'Listening for your instruction' : 'Awaiting your instruction';
+    }
+
+    function addMessage(role, text, source = '', sources = []) {
+      const message = document.createElement('div');
+      message.className = `message ${role}`;
+      const mark = document.createElement('div');
+      mark.className = 'message-mark';
+      mark.textContent = role === 'user' ? 'Y' : 'J';
+      const body = document.createElement('div');
+      const meta = document.createElement('div');
+      meta.className = 'message-meta';
+      meta.textContent = role === 'user' ? 'You / now' : `Jarvis / ${source || 'now'}`;
+      const content = document.createElement('div');
+      content.className = 'message-text';
+      content.textContent = text;
+      body.append(meta, content);
+      if (Array.isArray(sources) && sources.length > 0) {
+        const sourceList = document.createElement('div');
+        sourceList.className = 'message-sources';
+        sources.forEach((item, index) => {
+          if (typeof item.title !== 'string') return;
+          if (typeof item.url === 'string' && item.url.startsWith('https://')) {
+            const link = document.createElement('a');
+            link.className = 'message-source';
+            link.href = item.url;
+            link.target = '_blank';
+            link.rel = 'noopener noreferrer';
+            link.textContent = `[${index + 1}] ${item.title}`;
+            sourceList.append(link);
+          } else if (item.kind === 'library') {
+            const savedSource = document.createElement('div');
+            savedSource.className = 'message-source';
+            savedSource.textContent = `[${index + 1}] Saved: ${item.title} / ${item.source}`;
+            sourceList.append(savedSource);
+          }
+        });
+        if (sourceList.childElementCount) body.append(sourceList);
+      }
+      message.append(mark, body);
+      conversation.append(message);
+      conversation.scrollTop = conversation.scrollHeight;
+    }
+
+    async function sendCommand(rawText) {
+      const text = rawText.trim();
+      if (!text) return;
+      addMessage('user', text);
+      conversationHistory.push({ role: 'user', content: text });
+      commandInput.value = '';
+      document.getElementById('assistant-state').textContent = 'THINKING';
+      document.getElementById('core-caption').textContent = 'Thinking';
+      try {
+        const response = await fetch('/command', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ command: text, history: conversationHistory.slice(-11, -1) })
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'The command could not be processed.');
+        const source = data.source === 'ollama' || data.source === 'openai-compatible'
+          ? `${data.source} / ${data.model}`
+          : data.source === 'local command' ? 'local command'
+          : data.source === 'Home Assistant' ? 'Home Assistant'
+          : data.source === 'Home Assistant unavailable' ? 'Home Assistant unavailable'
+          : data.source === 'web search unavailable' ? 'Brave Search unavailable'
+          : data.source === 'brave search' ? 'Brave Search' : 'AI unavailable';
+        addMessage('assistant', data.reply, source, data.sources);
+        const historyReply = data.sources?.length
+          ? `${data.reply}\nSources: ${data.sources.map((item, index) => `[${index + 1}] ${item.title} (${item.url || item.source})`).join('; ')}`
+          : data.reply;
+        conversationHistory.push({ role: 'assistant', content: historyReply });
+        if (data.pending_action) {
+          controlHomeAssistant(data.pending_action.entity_id, data.pending_action.service, data.pending_action.data);
+        }
+        if (data.device === 'light') {
+          document.getElementById('light-value').textContent = data.state ? 'ON' : 'OFF';
+          document.getElementById('light-indicator').classList.toggle('active', data.state);
+        }
+        if (data.device === 'thermostat') {
+          document.getElementById('thermostat-value').textContent = `${data.state} C`;
+          document.getElementById('thermostat-indicator').classList.add('active');
+        }
+        if (document.getElementById('speech-toggle').getAttribute('aria-pressed') === 'true' && 'speechSynthesis' in window) {
+          window.speechSynthesis.cancel();
+          window.speechSynthesis.speak(new SpeechSynthesisUtterance(data.reply));
+        }
+      } catch (error) {
+        addMessage('assistant', `Connection error: ${error.message}. Check that Jarvis is running at localhost:5000.`);
+      } finally {
+        document.getElementById('assistant-state').textContent = 'READY';
+        document.getElementById('core-caption').textContent = 'Awaiting your instruction';
+      }
+    }
+
+    async function refreshHomeAssistantDevices() {
+      const response = await fetch('/api/home-assistant/entities');
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not load Home Assistant devices.');
+      const container = document.getElementById('home-assistant-devices');
+      container.replaceChildren();
+      data.entities.forEach((entity) => {
+        const domain = entity.entity_id.split('.')[0];
+        const row = document.createElement('div');
+        row.className = 'ha-device';
+        const label = document.createElement('div');
+        label.className = 'ha-name';
+        label.textContent = `${entity.attributes.friendly_name || entity.entity_id} / ${entity.state}`;
+        const controls = document.createElement('div');
+        controls.className = 'ha-controls';
+        if (['light', 'switch', 'fan'].includes(domain)) {
+          const nextService = entity.state === 'on' ? 'turn_off' : 'turn_on';
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className = 'ha-control';
+          button.textContent = nextService === 'turn_on' ? 'Turn on' : 'Turn off';
+          button.addEventListener('click', () => controlHomeAssistant(entity.entity_id, nextService));
+          controls.append(button);
+        } else if (domain === 'climate') {
+          const temperature = document.createElement('input');
+          temperature.className = 'ha-temperature';
+          temperature.type = 'number';
+          temperature.min = '5';
+          temperature.max = '35';
+          temperature.step = '0.5';
+          temperature.value = entity.attributes.temperature || entity.attributes.current_temperature || 20;
+          temperature.setAttribute('aria-label', `Temperature for ${entity.attributes.friendly_name || entity.entity_id}`);
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className = 'ha-control';
+          button.textContent = 'Set';
+          button.addEventListener('click', () => controlHomeAssistant(entity.entity_id, 'set_temperature', { temperature: Number(temperature.value) }));
+          controls.append(temperature, button);
+        }
+        row.append(label, controls);
+        container.append(row);
+      });
+      if (data.entities.length === 0) {
+        document.getElementById('home-assistant-status').textContent = 'No allowed devices';
+        document.getElementById('home-assistant-status').classList.add('unavailable');
+      }
+    }
+
+    async function controlHomeAssistant(entityId, service, data = undefined) {
+      const description = service === 'set_temperature'
+        ? `set ${entityId} to ${data.temperature} C`
+        : `${service.replace('_', ' ')} for ${entityId}`;
+      const confirmed = await new Promise((resolve) => {
+        resolveActionConfirmation = resolve;
+        document.getElementById('action-dialog-description').textContent = `Jarvis requests: ${description}. Nothing will be sent until you confirm.`;
+        document.getElementById('action-dialog').showModal();
+      });
+      if (!confirmed) {
+        addMessage('assistant', `Cancelled. No action was sent to ${entityId}.`, 'Home Assistant');
+        return;
+      }
+      try {
+        const response = await fetch('/api/home-assistant/control', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ entity_id: entityId, service, data, confirmed: true })
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'The device action was rejected.');
+        const confirmation = `Home Assistant accepted ${service} for ${entityId}.`;
+        addMessage('assistant', confirmation, 'Home Assistant');
+        conversationHistory.push({ role: 'assistant', content: confirmation });
+        refreshHomeAssistantDevices().catch(() => {});
+      } catch (error) {
+        addMessage('assistant', `Home Assistant error: ${error.message}`, 'Home Assistant');
+      }
+    }
+
+    function finishActionConfirmation(confirmed) {
+      if (!resolveActionConfirmation) return;
+      const resolve = resolveActionConfirmation;
+      resolveActionConfirmation = null;
+      document.getElementById('action-dialog').close();
+      resolve(confirmed);
+    }
+
+    document.getElementById('action-confirm').addEventListener('click', () => finishActionConfirmation(true));
+    document.getElementById('action-cancel').addEventListener('click', () => finishActionConfirmation(false));
+    document.getElementById('action-dialog').addEventListener('cancel', (event) => {
+      event.preventDefault();
+      finishActionConfirmation(false);
+    });
+
+    document.getElementById('rules-button').addEventListener('click', async () => {
+      rulesStatus.textContent = 'Loading saved rules...';
+      rulesDialog.showModal();
+      try {
+        const response = await fetch('/api/assistant-rules');
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Could not load rules.');
+        rulesInput.value = data.hard_rules;
+        document.getElementById('rules-count').textContent = `${rulesInput.value.length} / ${data.max_length}`;
+        rulesStatus.textContent = 'Saved in config/rules.json.';
+      } catch (error) {
+        rulesStatus.textContent = error.message;
+      }
+    });
+
+    rulesInput.addEventListener('input', () => {
+      document.getElementById('rules-count').textContent = `${rulesInput.value.length} / 8000`;
+    });
+    document.getElementById('rules-cancel').addEventListener('click', () => rulesDialog.close());
+    rulesDialog.addEventListener('cancel', (event) => {
+      event.preventDefault();
+      rulesDialog.close();
+    });
+    document.getElementById('rules-save').addEventListener('click', async () => {
+      rulesStatus.textContent = 'Saving...';
+      try {
+        const response = await fetch('/api/assistant-rules', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ hard_rules: rulesInput.value })
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Could not save rules.');
+        rulesStatus.textContent = 'Rules saved. They apply to new AI replies.';
+      } catch (error) {
+        rulesStatus.textContent = error.message;
+      }
+    });
+
+    async function refreshKnowledgeLibrary() {
+      try {
+        const response = await fetch('/api/knowledge');
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Could not load the local library.');
+        const container = document.getElementById('knowledge-list');
+        container.replaceChildren();
+        document.getElementById('knowledge-count').textContent = `${data.documents.length} saved source${data.documents.length === 1 ? '' : 's'}`;
+        knowledgeNote.textContent = data.ocr.available
+          ? 'Stored locally as extracted text. RapidOCR is ready for images and scanned PDFs.'
+          : 'Stored locally as extracted text. Reinstall RapidOCR from requirements.txt to enable local image OCR.';
+        data.documents.forEach((documentInfo) => {
+          const row = document.createElement('div');
+          row.className = 'knowledge-item';
+          const details = document.createElement('div');
+          details.className = 'knowledge-item-title';
+          details.textContent = documentInfo.title;
+          const source = document.createElement('div');
+          source.className = 'knowledge-item-source';
+          source.textContent = `${documentInfo.document_type.toUpperCase()} / ${documentInfo.source}`;
+          details.append(source);
+          const remove = document.createElement('button');
+          remove.type = 'button';
+          remove.className = 'knowledge-delete';
+          remove.textContent = 'Remove';
+          remove.setAttribute('aria-label', `Remove ${documentInfo.title} from saved knowledge`);
+          remove.addEventListener('click', () => removeKnowledgeSource(documentInfo));
+          row.append(details, remove);
+          container.append(row);
+        });
+      } catch (error) {
+        document.getElementById('knowledge-count').textContent = 'Library unavailable';
+        knowledgeNote.textContent = error.message;
+      }
+    }
+
+    async function addKnowledgeSource(formData) {
+      knowledgeNote.textContent = 'Extracting and indexing source locally...';
+      try {
+        const response = await fetch('/api/knowledge', { method: 'POST', body: formData });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Could not add that source.');
+        knowledgeNote.textContent = data.duplicate ? 'That source is already saved.' : `Saved ${data.title || 'source'} to the local library.`;
+        await refreshKnowledgeLibrary();
+      } catch (error) {
+        knowledgeNote.textContent = error.message;
+      }
+    }
+
+    async function removeKnowledgeSource(documentInfo) {
+      if (!window.confirm(`Remove “${documentInfo.title}” and its extracted text from local memory?`)) return;
+      try {
+        const response = await fetch(`/api/knowledge/${documentInfo.document_id}`, { method: 'DELETE' });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Could not remove that source.');
+        knowledgeNote.textContent = 'Source removed from local memory.';
+        await refreshKnowledgeLibrary();
+      } catch (error) {
+        knowledgeNote.textContent = error.message;
+      }
+    }
+
+    document.getElementById('knowledge-file-button').addEventListener('click', () => document.getElementById('knowledge-file').click());
+    document.getElementById('knowledge-file').addEventListener('change', (event) => {
+      const file = event.target.files[0];
+      if (!file) return;
+      const formData = new FormData();
+      formData.append('file', file);
+      addKnowledgeSource(formData);
+      event.target.value = '';
+    });
+    document.getElementById('knowledge-url-form').addEventListener('submit', (event) => {
+      event.preventDefault();
+      const url = document.getElementById('knowledge-url').value.trim();
+      if (!url) return;
+      const formData = new FormData();
+      formData.set('url', url);
+      addKnowledgeSource(formData);
+      document.getElementById('knowledge-url').value = '';
+    });
+    refreshKnowledgeLibrary();
+
+    function renderSecurityResults(items) {
+      const container = document.getElementById('security-results');
+      container.replaceChildren();
+      items.forEach((item) => {
+        const row = document.createElement('div');
+        row.className = 'security-result';
+        const text = document.createElement('div');
+        text.className = 'knowledge-item-title';
+        text.textContent = item.name;
+        const detail = document.createElement('div');
+        detail.className = 'security-result-detail';
+        detail.textContent = item.detail;
+        text.append(detail);
+        const status = document.createElement('span');
+        status.className = `security-result-status ${item.status}`;
+        status.textContent = item.status;
+        row.append(text, status);
+        container.append(row);
+      });
+    }
+
+    async function runJarvisSelfAudit() {
+      const button = document.getElementById('security-self-audit');
+      const summary = document.getElementById('security-summary');
+      button.disabled = true;
+      summary.textContent = 'Checking Jarvis...';
+      try {
+        const response = await fetch('/api/security/self-audit');
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Self-audit failed.');
+        summary.textContent = `${data.passed} passed / ${data.review} review / ${data.failed} failed`;
+        renderSecurityResults(data.checks);
+      } catch (error) {
+        summary.textContent = error.message;
+        renderSecurityResults([]);
+      } finally {
+        button.disabled = false;
+      }
+    }
+
+    async function runDependencyAudit() {
+      const button = document.getElementById('security-dependency-audit');
+      const summary = document.getElementById('security-summary');
+      button.disabled = true;
+      summary.textContent = 'Checking installed packages...';
+      try {
+        const response = await fetch('/api/security/dependency-audit', { method: 'POST' });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Package audit failed.');
+        summary.textContent = `${data.packages_scanned} packages / ${data.vulnerability_count} known issues`;
+        renderSecurityResults(data.findings.map((finding) => ({
+          name: `${finding.name} ${finding.version} / ${finding.id}`,
+          status: 'review',
+          detail: finding.fix_versions.length ? `Suggested fixes: ${finding.fix_versions.join(', ')}` : 'No fix version reported.'
+        })));
+        if (data.vulnerability_count === 0) {
+          renderSecurityResults([{ name: 'Dependency audit', status: 'pass', detail: 'No known vulnerabilities reported for the installed packages.' }]);
+        }
+      } catch (error) {
+        summary.textContent = error.message;
+        renderSecurityResults([]);
+      } finally {
+        button.disabled = false;
+      }
+    }
+
+    document.getElementById('security-site-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const url = document.getElementById('security-site-url').value.trim();
+      if (!url) return;
+      if (!window.confirm(`Confirm you own or are authorized to assess this exact HTTPS domain: ${url}?`)) return;
+      const button = document.getElementById('security-site-check');
+      const summary = document.getElementById('security-summary');
+      button.disabled = true;
+      summary.textContent = 'Checking one HTTPS page...';
+      try {
+        const response = await fetch('/api/security/https-check', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url, confirmed_scope: true })
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'HTTPS check failed.');
+        summary.textContent = data.url;
+        renderSecurityResults(data.checks);
+      } catch (error) {
+        summary.textContent = error.message;
+        renderSecurityResults([]);
+      } finally {
+        button.disabled = false;
+      }
+    });
+
+    document.getElementById('security-self-audit').addEventListener('click', runJarvisSelfAudit);
+    document.getElementById('security-dependency-audit').addEventListener('click', runDependencyAudit);
+
+    const codeWorkbenchForm = document.getElementById('code-workbench-form');
+    const codeDiff = document.getElementById('code-diff');
+    const codeStatus = document.getElementById('code-workbench-status');
+    const codeApplyButton = document.getElementById('code-apply-button');
+
+    fetch('/api/code/workspace').then(async (response) => {
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Workspace unavailable.');
+      document.getElementById('code-workbench-location').textContent = `Workspace: ${data.workspace} / ${data.languages.join(', ')} / execution disabled`;
+    }).catch((error) => {
+      document.getElementById('code-workbench-location').textContent = error.message;
+    });
+
+    function invalidateCodeDraft() {
+      currentCodeDraftId = null;
+      codeApplyButton.disabled = true;
+      codeDiff.textContent = '';
+      codeDiff.classList.add('hidden');
+      codeStatus.textContent = 'Draft cleared because the path or request changed.';
+    }
+
+    document.getElementById('code-path').addEventListener('input', invalidateCodeDraft);
+    document.getElementById('code-instruction').addEventListener('input', invalidateCodeDraft);
+    codeWorkbenchForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      invalidateCodeDraft();
+      const button = document.getElementById('code-draft-button');
+      button.disabled = true;
+      codeStatus.textContent = 'Asking local Ollama for a draft...';
+      try {
+        const response = await fetch('/api/code/draft', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            path: document.getElementById('code-path').value.trim(),
+            instruction: document.getElementById('code-instruction').value.trim()
+          })
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Could not draft that change.');
+        currentCodeDraftId = data.draft_id;
+        codeDiff.textContent = data.diff;
+        codeDiff.classList.remove('hidden');
+        codeApplyButton.disabled = false;
+        codeStatus.textContent = `${data.language} diff ready for ${data.path}. Review every line before applying.`;
+      } catch (error) {
+        codeStatus.textContent = error.message;
+      } finally {
+        button.disabled = false;
+      }
+    });
+
+    codeApplyButton.addEventListener('click', async () => {
+      if (!currentCodeDraftId) return;
+      const path = document.getElementById('code-path').value.trim();
+      if (!window.confirm(`Apply the reviewed diff to ${path}? Jarvis will create a backup and will not execute the code.`)) return;
+      codeApplyButton.disabled = true;
+      codeStatus.textContent = 'Applying reviewed diff and creating backup...';
+      try {
+        const response = await fetch('/api/code/apply', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ draft_id: currentCodeDraftId, confirmed: true })
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Could not apply the reviewed diff.');
+        currentCodeDraftId = null;
+        codeDiff.classList.add('hidden');
+        codeStatus.textContent = `Applied. Backup: ${data.backup}.${data.restart_required ? ' Restart Jarvis to load this backend change.' : ''}`;
+      } catch (error) {
+        codeStatus.textContent = error.message;
+        codeApplyButton.disabled = false;
+      }
+    });
+
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      sendCommand(commandInput.value);
+    });
+
+    document.querySelectorAll('[data-command]').forEach((button) => {
+      button.addEventListener('click', () => sendCommand(button.dataset.command));
+    });
+
+    voiceButton.addEventListener('click', () => {
+      if (!recognition) return;
+      if (isListening) {
+        recognition.stop();
+        return;
+      }
+      try {
+        recognition.start();
+      } catch (error) {
+        setListening(false);
+        addMessage('assistant', 'Voice input could not start. Check microphone permission and try again.');
+      }
+    });
+
+    if (recognition) {
+      recognition.onstart = () => setListening(true);
+      recognition.onend = () => setListening(false);
+      recognition.onresult = (event) => {
+        const transcript = event.results[0][0].transcript;
+        commandInput.value = transcript;
+        sendCommand(transcript);
+      };
+      recognition.onerror = (event) => {
+        setListening(false);
+        const detail = event.error === 'not-allowed' ? 'Microphone permission was denied.' : `Voice input error: ${event.error}.`;
+        addMessage('assistant', detail);
+      };
+      document.getElementById('metric-voice').textContent = 'READY';
+    }
+
+    const speechToggle = document.createElement('button');
+    speechToggle.type = 'button';
+    speechToggle.id = 'speech-toggle';
+    speechToggle.className = 'icon-button';
+    speechToggle.setAttribute('aria-label', 'Toggle spoken replies');
+    speechToggle.setAttribute('aria-pressed', 'false');
+    speechToggle.title = 'Toggle spoken replies';
+    speechToggle.innerHTML = '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5Z"></path><path d="M15.5 8.5a5 5 0 0 1 0 7m3-10a9 9 0 0 1 0 13"></path></svg>';
+    speechToggle.addEventListener('click', () => {
+      const enabled = speechToggle.getAttribute('aria-pressed') !== 'true';
+      speechToggle.setAttribute('aria-pressed', String(enabled));
+      speechToggle.title = enabled ? 'Turn spoken replies off' : 'Turn spoken replies on';
+      if (!enabled && 'speechSynthesis' in window) window.speechSynthesis.cancel();
+    });
+    document.querySelector('.input-row').insertBefore(speechToggle, document.querySelector('.send-button'));
+
+    function updateClock() {
+      document.getElementById('clock').textContent = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(new Date());
+    }
+    updateClock();
+    window.setInterval(updateClock, 1000);
+
+    fetch('/api/health').then((response) => response.json()).then((data) => {
+      document.getElementById('connection-label').textContent = data.status.toUpperCase();
+      document.getElementById('metric-connection').textContent = data.status.toUpperCase();
+      const modelBadge = document.getElementById('model-badge');
+      modelBadge.textContent = data.ai.ready ? `${data.ai.provider.toUpperCase()} / ${data.ai.model}` : 'AI / OFFLINE';
+      modelBadge.title = data.ai.detail;
+      modelBadge.classList.toggle('unavailable', !data.ai.ready);
+      const internetStatus = document.getElementById('internet-status');
+      internetStatus.textContent = data.internet.search_ready ? 'Search + page reads ready' : data.internet.page_read_ready ? 'Page reads ready; search key needed' : 'Internet disabled';
+      internetStatus.classList.toggle('unavailable', !data.internet.ready);
+      const homeAssistantStatus = document.getElementById('home-assistant-status');
+      homeAssistantStatus.textContent = data.home_assistant.ready
+        ? `${data.home_assistant.allowed_entities} allowed`
+        : 'Not connected';
+      homeAssistantStatus.classList.toggle('unavailable', !data.home_assistant.ready);
+      document.getElementById('light-value').textContent = data.devices.light ? 'ON' : 'OFF';
+      document.getElementById('light-indicator').classList.toggle('active', data.devices.light);
+      document.getElementById('thermostat-value').textContent = `${data.devices.thermostat} C`;
+      if (data.home_assistant.ready) {
+        refreshHomeAssistantDevices().catch(() => {
+          homeAssistantStatus.textContent = 'Unreachable';
+          homeAssistantStatus.classList.add('unavailable');
+        });
+      }
+    }).catch(() => {
+      document.getElementById('connection-label').textContent = 'OFFLINE';
+      document.getElementById('metric-connection').textContent = 'OFFLINE';
+    });
+  </script>
+</body>
+</html>
