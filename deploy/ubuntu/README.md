@@ -2,6 +2,22 @@
 
 This keeps the Flask app private on loopback and exposes it through Nginx on port 80 with Basic Auth. Replace example values such as `192.168.1.50` and the LAN CIDR with your server's actual reserved IP and subnet.
 
+## Quick Install
+
+From Windows PowerShell, copy the project folder to your Ubuntu server:
+
+```powershell
+scp -r C:\JarvisCore <linux-user>@<server-ip>:/tmp/
+ssh <linux-user>@<server-ip>
+sudo bash /tmp/JarvisCore/deploy/ubuntu/install.sh
+```
+
+The installer asks for the server LAN IPv4, your trusted LAN CIDR, and Ollama model. It installs system dependencies, the Python venv, Ollama, the selected model, a single-worker Gunicorn systemd service, and an Nginx port-80 site restricted to that CIDR with Basic Auth. It prompts you to set the web login password. The 30B default model is a large download; choose a smaller Ollama model when RAM is limited. The app itself stays bound to `127.0.0.1:5000`.
+
+Open `http://<server-ip>` from a device on that LAN and sign in. The code workbench uses `/var/lib/jarvis/Projects`, separate from the application. Review `/etc/jarvis.env` to configure optional Brave Search or Home Assistant values.
+
+The script has not been executed in this Windows workspace because Bash/WSL is unavailable here. Run it on the Ubuntu machine; read the script first if you need to adapt it for an existing Nginx/firewall setup.
+
 ## 1. Prepare the server
 
 Reserve a stable LAN address for the Ubuntu laptop in your router (DHCP reservation is preferred). From Windows PowerShell, copy the project to the server:

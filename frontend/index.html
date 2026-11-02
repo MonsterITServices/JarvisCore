@@ -82,28 +82,22 @@
       display: grid;
       place-items: center;
       position: relative;
-      background: radial-gradient(ellipse at center, rgba(71, 135, 103, .13), transparent 53%);
+      overflow: hidden;
+      background: radial-gradient(ellipse at 50% 47%, rgba(12, 88, 130, .2), transparent 58%);
     }
     .core {
-      width: min(57vw, 320px);
-      max-width: 320px;
-      aspect-ratio: 1;
+      width: min(64vw, 410px);
+      max-width: 410px;
+      aspect-ratio: 1.2;
       position: relative;
       display: grid;
       place-items: center;
-      border-radius: 50%;
-      border: 1px solid rgba(185, 242, 124, .3);
-      box-shadow: 0 0 42px rgba(86, 194, 150, .08), inset 0 0 38px rgba(86, 194, 150, .07);
       animation: arrive .9s ease-out both;
     }
-    .core::before, .core::after { content: ""; position: absolute; inset: 17px; border-radius: 50%; border: 1px dashed rgba(120, 216, 195, .36); }
-    .core::after { inset: 39px; border-style: solid; border-color: rgba(185, 242, 124, .23); }
-    .core-ring { position: absolute; inset: -13px; border-radius: 50%; border: 1px solid transparent; border-top-color: rgba(120, 216, 195, .6); border-bottom-color: rgba(120, 216, 195, .2); animation: orbit 18s linear infinite; }
-    .core-ring:nth-child(2) { inset: 8px; transform: rotate(67deg); animation-duration: 24s; animation-direction: reverse; border-top-color: rgba(185, 242, 124, .45); }
-    .core-ring:nth-child(3) { inset: 57px; border-left-color: rgba(120, 216, 195, .3); border-top-color: transparent; animation-duration: 30s; }
-    .core-center { width: 95px; aspect-ratio: 1; display: grid; place-items: center; border: 1px solid rgba(185, 242, 124, .65); border-radius: 50%; color: var(--mint); background: rgba(185, 242, 124, .055); box-shadow: 0 0 40px rgba(185, 242, 124, .15); }
-    .core-center span { font: 400 33px var(--display); }
-    .core-caption { position: absolute; bottom: 30px; color: var(--muted); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; }
+    .globe-canvas { position: absolute; inset: 0; width: 100%; height: 100%; outline: none; }
+    .globe-base { position: absolute; bottom: 15%; width: 57%; height: 14%; border: 1px solid rgba(38, 187, 235, .48); border-top-color: rgba(117, 227, 255, .9); border-radius: 50%; transform: rotateX(68deg); box-shadow: 0 0 22px rgba(22, 167, 224, .2); }
+    .globe-horizon { position: absolute; width: 74%; height: 54%; border: 1px solid rgba(31, 130, 180, .22); border-radius: 50%; transform: rotate(-18deg) scaleY(.42); }
+    .core-caption { position: absolute; bottom: 30px; color: #8db4c4; font-size: 10px; letter-spacing: .12em; text-transform: uppercase; }
     .telemetry { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--line); }
     .metric { min-height: 83px; padding: 17px 20px; border-right: 1px solid var(--line); }
     .metric:last-child { border-right: 0; }
@@ -126,6 +120,7 @@
     .integration-state.unavailable { color: var(--amber); }
     .knowledge-library { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
     .knowledge-heading { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .knowledge-heading-actions { display: flex; gap: 6px; }
     .knowledge-title { font-size: 10px; text-transform: uppercase; letter-spacing: .1em; }
     .knowledge-count { display: block; margin-top: 5px; color: var(--muted); font-size: 9px; }
     .knowledge-form { display: flex; gap: 6px; margin-top: 10px; }
@@ -218,6 +213,12 @@
     .send-button { min-width: 68px; color: var(--bg); border-color: var(--mint); background: var(--mint); font-size: 10px; text-transform: uppercase; }
     .send-button:hover { color: var(--bg); background: #caf99a; }
     .voice-note { margin: 10px 0 0; color: var(--muted); font-size: 9px; line-height: 1.5; }
+    .provider-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+    .provider-label { color: var(--muted); font-size: 9px; text-transform: uppercase; }
+    .provider-select { max-width: 100%; min-height: 32px; padding: 0 8px; border: 1px solid var(--line); background: #111816; color: var(--text); font-size: 10px; }
+    .provider-select:focus { outline: 1px solid var(--cyan); }
+    .provider-note { flex: 1 1 180px; color: var(--muted); font-size: 8px; line-height: 1.5; }
+    .provider-note.external { color: var(--amber); }
     .footer { display: flex; justify-content: space-between; gap: 14px; padding-top: 16px; color: var(--muted); font-size: 9px; }
     .footer strong { color: var(--amber); font-weight: 400; }
     .hidden { display: none; }
@@ -243,7 +244,7 @@
       .system-panel { min-height: 570px; }
       .chat-panel { min-height: 620px; }
       .core-area { min-height: 310px; }
-      .core { width: min(66vw, 275px); }
+      .core { width: min(78vw, 360px); }
       .telemetry .metric { min-height: 74px; padding: 13px 10px; }
       .metric-value { font-size: 16px; }
       .footer { flex-direction: column; }
@@ -278,8 +279,9 @@
           <div class="panel-heading"><span class="panel-title">Core systems</span><span class="panel-index">LOCAL / 001</span></div>
           <div class="core-area">
             <div class="core" aria-hidden="true">
-              <div class="core-ring"></div><div class="core-ring"></div><div class="core-ring"></div>
-              <div class="core-center"><span>J</span></div>
+              <canvas class="globe-canvas" id="globe-canvas"></canvas>
+              <div class="globe-horizon"></div>
+              <div class="globe-base"></div>
             </div>
             <div class="core-caption" id="core-caption">Awaiting your instruction</div>
           </div>
@@ -302,7 +304,10 @@
             <section class="knowledge-library" aria-label="Saved knowledge">
               <div class="knowledge-heading">
                 <div><div class="knowledge-title">Saved knowledge</div><div class="knowledge-count" id="knowledge-count">Loading library...</div></div>
-                <button class="knowledge-add" id="knowledge-file-button" type="button">Import file</button>
+                <div class="knowledge-heading-actions">
+                  <button class="knowledge-add" id="knowledge-note-button" type="button">Add note</button>
+                  <button class="knowledge-add" id="knowledge-file-button" type="button">Import file</button>
+                </div>
                 <input class="hidden" id="knowledge-file" type="file" accept=".txt,.md,.markdown,.html,.htm,.csv,.pdf,.docx,.pptx,.xlsx,.png,.jpg,.jpeg,.gif,.bmp,.tif,.tiff,.webp">
               </div>
               <form class="knowledge-form" id="knowledge-url-form">
@@ -352,7 +357,7 @@
           <div class="conversation" id="conversation" aria-live="polite" aria-relevant="additions">
             <div class="message">
               <div class="message-mark">J</div>
-              <div><div class="message-meta">Jarvis / now</div><div class="message-text">Systems are online. Ask a question, request current information, or name an allowlisted Home Assistant device. Say “help” for details.</div></div>
+              <div><div class="message-meta">Jarvis / now</div><div class="message-text">Systems are online. Ask a question, request current information, or say “remember that…” to save a note for later. Say “help” for details.</div></div>
             </div>
           </div>
           <div class="quick-actions">
@@ -366,13 +371,24 @@
           </div>
           <form class="composer" id="command-form">
             <div class="input-row">
-              <input class="command-input" id="command-input" type="text" maxlength="1000" placeholder="Ask Jarvis something..." autocomplete="off" aria-label="Message Jarvis">
+              <input class="command-input" id="command-input" type="text" maxlength="1000" placeholder="Ask, or say “remember that…”" autocomplete="off" aria-label="Message Jarvis">
               <button class="icon-button" id="voice-button" type="button" aria-label="Start voice input" title="Start voice input" aria-pressed="false">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"></rect><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3m-4 0h8"></path></svg>
               </button>
               <button class="send-button" type="submit">Send</button>
             </div>
             <div class="voice-note" id="voice-note">Voice recognition availability depends on your browser. Microphone access is requested only when you press the mic button.</div>
+            <div class="provider-row">
+              <label class="provider-label" for="provider-select">AI provider</label>
+              <select class="provider-select" id="provider-select" aria-label="Choose an AI provider for this message">
+                <option value="ollama">Ollama / local</option>
+                <option value="openai-compatible">OpenAI-compatible</option>
+                <option value="gemini">Gemini</option>
+                <option value="anthropic">Claude</option>
+                <option value="copilot">GitHub Copilot</option>
+              </select>
+              <span class="provider-note" id="provider-note" aria-live="polite">Local request; prompt stays on this machine.</span>
+            </div>
           </form>
         </section>
       </div>
@@ -395,22 +411,71 @@
     <div class="rules-actions"><span class="rules-count" id="rules-count">0 / 8000</span><div class="action-dialog-actions"><button type="button" id="rules-cancel">Cancel</button><button type="button" id="rules-save">Save rules</button></div></div>
     <div class="rules-status" id="rules-status" aria-live="polite"></div>
   </dialog>
+  <dialog class="rules-dialog" id="knowledge-note-dialog" aria-labelledby="knowledge-note-title">
+    <h2 id="knowledge-note-title">Save a knowledge note</h2>
+    <p class="rules-description">Paste useful reference text or an answer from another AI. Jarvis stores it locally for retrieval; this does not train the language model.</p>
+    <label class="rules-label" for="knowledge-note-title-input">Source title</label>
+    <input class="knowledge-url" id="knowledge-note-title-input" maxlength="300" placeholder="e.g. Lua coroutine reference">
+    <label class="rules-label" for="knowledge-note-content">Reference text</label>
+    <textarea class="rules-input" id="knowledge-note-content" maxlength="100000" aria-label="Reference text to save"></textarea>
+    <div class="rules-actions"><span class="rules-count" id="knowledge-note-count">0 / 100000</span><div class="action-dialog-actions"><button type="button" id="knowledge-note-cancel">Cancel</button><button type="button" id="knowledge-note-save">Save note</button></div></div>
+    <div class="rules-status" id="knowledge-note-status" aria-live="polite"></div>
+  </dialog>
 
   <script>
     const conversation = document.getElementById('conversation');
     const commandInput = document.getElementById('command-input');
+    const providerSelect = document.getElementById('provider-select');
+    const providerNote = document.getElementById('provider-note');
     const form = document.getElementById('command-form');
     const voiceButton = document.getElementById('voice-button');
     const recognitionType = window.SpeechRecognition || window.webkitSpeechRecognition;
     const recognition = recognitionType ? new recognitionType() : null;
     let isListening = false;
     const conversationHistory = [];
+    let aiStatus = null;
     let resolveActionConfirmation = null;
+
+    function updateProviderStatus() {
+      const provider = providerSelect.value;
+      const external = provider !== 'ollama';
+      providerNote.classList.toggle('external', external);
+      providerNote.textContent = external
+        ? 'External request. Each send requires confirmation and may incur provider charges.'
+        : 'Local request; prompt stays on this machine.';
+      if (!aiStatus) return;
+      const providerInfo = aiStatus.providers?.[provider];
+      const model = provider === aiStatus.provider ? aiStatus.model : providerInfo?.model;
+      const ready = provider === aiStatus.provider
+        ? aiStatus.ready
+        : Boolean(providerInfo?.configured && aiStatus.external_enabled);
+      const providerNames = {
+        ollama: 'Ollama',
+        'openai-compatible': 'OpenAI-compatible',
+        gemini: 'Gemini',
+        anthropic: 'Claude',
+        copilot: 'GitHub Copilot'
+      };
+      const modelBadge = document.getElementById('model-badge');
+      modelBadge.textContent = ready && model
+        ? `${providerNames[provider]} / ${model}`
+        : `${providerNames[provider]} / SETUP REQUIRED`;
+      modelBadge.title = provider === aiStatus.provider
+        ? aiStatus.detail
+        : providerInfo?.detail || 'Provider status unavailable';
+      modelBadge.classList.toggle('unavailable', !ready);
+    }
+
+    providerSelect.addEventListener('change', updateProviderStatus);
     let currentCodeDraftId = null;
     const rulesDialog = document.getElementById('rules-dialog');
     const rulesInput = document.getElementById('hard-rules-input');
     const rulesStatus = document.getElementById('rules-status');
     const knowledgeNote = document.getElementById('knowledge-note');
+    const knowledgeNoteDialog = document.getElementById('knowledge-note-dialog');
+    const knowledgeNoteTitle = document.getElementById('knowledge-note-title-input');
+    const knowledgeNoteContent = document.getElementById('knowledge-note-content');
+    const knowledgeNoteStatus = document.getElementById('knowledge-note-status');
 
     if (recognition) {
       recognition.lang = 'en-US';
@@ -476,6 +541,9 @@
     async function sendCommand(rawText) {
       const text = rawText.trim();
       if (!text) return;
+      const provider = providerSelect.value;
+      const external = provider !== 'ollama';
+      if (external && !window.confirm(`Send this prompt and the recent conversation to ${providerSelect.selectedOptions[0].text}? The provider may charge for usage.`)) return;
       addMessage('user', text);
       conversationHistory.push({ role: 'user', content: text });
       commandInput.value = '';
@@ -485,13 +553,26 @@
         const response = await fetch('/command', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ command: text, history: conversationHistory.slice(-11, -1) })
+          body: JSON.stringify({
+            command: text,
+            history: conversationHistory.slice(-11, -1),
+            provider,
+            external_confirmed: external
+          })
         });
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || 'The command could not be processed.');
-        const source = data.source === 'ollama' || data.source === 'openai-compatible'
-          ? `${data.source} / ${data.model}`
+        const providerNames = {
+          ollama: 'Ollama',
+          'openai-compatible': 'OpenAI-compatible',
+          gemini: 'Gemini',
+          anthropic: 'Claude',
+          copilot: 'GitHub Copilot'
+        };
+        const source = Object.hasOwn(providerNames, data.source)
+          ? `${providerNames[data.source]} / ${data.model}`
           : data.source === 'local command' ? 'local command'
+          : data.source === 'local memory' ? 'local memory'
           : data.source === 'Home Assistant' ? 'Home Assistant'
           : data.source === 'Home Assistant unavailable' ? 'Home Assistant unavailable'
           : data.source === 'web search unavailable' ? 'Brave Search unavailable'
@@ -501,6 +582,7 @@
           ? `${data.reply}\nSources: ${data.sources.map((item, index) => `[${index + 1}] ${item.title} (${item.url || item.source})`).join('; ')}`
           : data.reply;
         conversationHistory.push({ role: 'assistant', content: historyReply });
+        if (data.memory_saved) refreshKnowledgeLibrary();
         if (data.pending_action) {
           controlHomeAssistant(data.pending_action.entity_id, data.pending_action.service, data.pending_action.data);
         }
@@ -735,6 +817,38 @@
       formData.set('url', url);
       addKnowledgeSource(formData);
       document.getElementById('knowledge-url').value = '';
+    });
+    document.getElementById('knowledge-note-button').addEventListener('click', () => {
+      knowledgeNoteTitle.value = '';
+      knowledgeNoteContent.value = '';
+      knowledgeNoteStatus.textContent = 'Only pasted text and the title are saved locally.';
+      document.getElementById('knowledge-note-count').textContent = '0 / 100000';
+      knowledgeNoteDialog.showModal();
+    });
+    document.getElementById('knowledge-note-cancel').addEventListener('click', () => knowledgeNoteDialog.close());
+    knowledgeNoteDialog.addEventListener('cancel', (event) => {
+      event.preventDefault();
+      knowledgeNoteDialog.close();
+    });
+    knowledgeNoteContent.addEventListener('input', () => {
+      document.getElementById('knowledge-note-count').textContent = `${knowledgeNoteContent.value.length} / 100000`;
+    });
+    document.getElementById('knowledge-note-save').addEventListener('click', async () => {
+      knowledgeNoteStatus.textContent = 'Saving note locally...';
+      try {
+        const response = await fetch('/api/knowledge/note', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title: knowledgeNoteTitle.value, content: knowledgeNoteContent.value })
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Could not save this note.');
+        knowledgeNoteDialog.close();
+        knowledgeNote.textContent = data.duplicate ? 'That note is already saved.' : `Saved ${data.title} to local knowledge.`;
+        await refreshKnowledgeLibrary();
+      } catch (error) {
+        knowledgeNoteStatus.textContent = error.message;
+      }
     });
     refreshKnowledgeLibrary();
 
@@ -973,10 +1087,11 @@
     fetch('/api/health').then((response) => response.json()).then((data) => {
       document.getElementById('connection-label').textContent = data.status.toUpperCase();
       document.getElementById('metric-connection').textContent = data.status.toUpperCase();
-      const modelBadge = document.getElementById('model-badge');
-      modelBadge.textContent = data.ai.ready ? `${data.ai.provider.toUpperCase()} / ${data.ai.model}` : 'AI / OFFLINE';
-      modelBadge.title = data.ai.detail;
-      modelBadge.classList.toggle('unavailable', !data.ai.ready);
+      aiStatus = data.ai;
+      if ([...providerSelect.options].some((option) => option.value === data.ai.provider)) {
+        providerSelect.value = data.ai.provider;
+      }
+      updateProviderStatus();
       const internetStatus = document.getElementById('internet-status');
       internetStatus.textContent = data.internet.search_ready ? 'Search + page reads ready' : data.internet.page_read_ready ? 'Page reads ready; search key needed' : 'Internet disabled';
       internetStatus.classList.toggle('unavailable', !data.internet.ready);
@@ -998,6 +1113,147 @@
       document.getElementById('connection-label').textContent = 'OFFLINE';
       document.getElementById('metric-connection').textContent = 'OFFLINE';
     });
+  </script>
+  <script type="module">
+    import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js';
+
+    const canvas = document.getElementById('globe-canvas');
+    const host = canvas?.parentElement;
+    if (canvas && host) {
+      try {
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(35, 1, 0.1, 30);
+        camera.position.set(0, 0, 4.05);
+        const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+        renderer.setClearColor(0x020b14, 0);
+        renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+        const globe = new THREE.Group();
+        globe.position.y = -0.18;
+        scene.add(globe);
+        const pointCount = 3600;
+        const positions = new Float32Array(pointCount * 3);
+        const colors = new Float32Array(pointCount * 3);
+        const goldenAngle = Math.PI * (3 - Math.sqrt(5));
+        for (let index = 0; index < pointCount; index += 1) {
+          const y = 1 - ((index + 0.5) / pointCount) * 2;
+          const ring = Math.sqrt(1 - y * y);
+          const angle = goldenAngle * index;
+          const shimmer = 0.78 + ((index * 37) % 23) / 100;
+          positions[index * 3] = Math.cos(angle) * ring * 1.03;
+          positions[index * 3 + 1] = y * 1.03;
+          positions[index * 3 + 2] = Math.sin(angle) * ring * 1.03;
+          colors[index * 3] = 0.11 * shimmer;
+          colors[index * 3 + 1] = (0.62 + 0.2 * (1 - Math.abs(y))) * shimmer;
+          colors[index * 3 + 2] = shimmer;
+        }
+        const pointGeometry = new THREE.BufferGeometry();
+        pointGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        pointGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+        globe.add(new THREE.Points(pointGeometry, new THREE.PointsMaterial({
+          size: 0.011,
+          vertexColors: true,
+          transparent: true,
+          opacity: 0.91,
+          depthWrite: false,
+          blending: THREE.AdditiveBlending,
+          sizeAttenuation: true
+        })));
+
+        globe.add(new THREE.Mesh(
+          new THREE.SphereGeometry(1.055, 48, 32),
+          new THREE.MeshBasicMaterial({
+            color: 0x087bb5,
+            side: THREE.BackSide,
+            transparent: true,
+            opacity: 0.12,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false
+          })
+        ));
+
+        const gridMaterial = new THREE.LineBasicMaterial({
+          color: 0x4fdcff,
+          transparent: true,
+          opacity: 0.22,
+          blending: THREE.AdditiveBlending
+        });
+        for (let step = -3; step <= 3; step += 1) {
+          const latitude = (step / 4) * Math.PI / 2;
+          const radius = Math.cos(latitude) * 1.035;
+          const y = Math.sin(latitude) * 1.035;
+          const points = [];
+          for (let index = 0; index < 96; index += 1) {
+            const angle = (index / 96) * Math.PI * 2;
+            points.push(new THREE.Vector3(Math.cos(angle) * radius, y, Math.sin(angle) * radius));
+          }
+          globe.add(new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(points), gridMaterial));
+        }
+        for (let meridian = 0; meridian < 12; meridian += 1) {
+          const longitude = (meridian / 12) * Math.PI;
+          const points = [];
+          for (let index = 0; index <= 72; index += 1) {
+            const latitude = -Math.PI / 2 + (index / 72) * Math.PI;
+            const radius = Math.cos(latitude) * 1.035;
+            points.push(new THREE.Vector3(Math.cos(longitude) * radius, Math.sin(latitude) * 1.035, Math.sin(longitude) * radius));
+          }
+          globe.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), gridMaterial));
+        }
+
+        const starPositions = new Float32Array(420 * 3);
+        for (let index = 0; index < 420; index += 1) {
+          const angle = index * 2.399963;
+          const radius = 1.35 + ((index * 19) % 100) / 100 * 1.6;
+          starPositions[index * 3] = Math.cos(angle) * radius;
+          starPositions[index * 3 + 1] = Math.sin(angle * 1.7) * radius * 0.62;
+          starPositions[index * 3 + 2] = Math.sin(angle) * radius;
+        }
+        const starGeometry = new THREE.BufferGeometry();
+        starGeometry.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
+        scene.add(new THREE.Points(starGeometry, new THREE.PointsMaterial({
+          color: 0x3c9fc9,
+          size: 0.008,
+          transparent: true,
+          opacity: 0.5,
+          depthWrite: false,
+          blending: THREE.AdditiveBlending
+        })));
+
+        const resize = () => {
+          const bounds = host.getBoundingClientRect();
+          const width = Math.max(1, Math.round(bounds.width));
+          const height = Math.max(1, Math.round(bounds.height));
+          renderer.setSize(width, height, false);
+          camera.aspect = width / height;
+          camera.updateProjectionMatrix();
+          renderer.render(scene, camera);
+        };
+        const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        let frame = 0;
+        let visible = !document.hidden;
+        const draw = () => {
+          if (!visible) return;
+          globe.rotation.y += reducedMotion ? 0 : 0.0015;
+          renderer.render(scene, camera);
+          if (!reducedMotion) frame = requestAnimationFrame(draw);
+        };
+        new ResizeObserver(resize).observe(host);
+        resize();
+        if (!reducedMotion) frame = requestAnimationFrame(draw);
+        document.addEventListener('visibilitychange', () => {
+          visible = !document.hidden;
+          if (visible && !reducedMotion && !frame) frame = requestAnimationFrame(draw);
+          if (!visible && frame) {
+            cancelAnimationFrame(frame);
+            frame = 0;
+          }
+        });
+      } catch (error) {
+        host.classList.add('globe-unavailable');
+        console.warn('Jarvis holographic globe could not initialize.', error);
+      }
+    }
   </script>
 </body>
 </html>

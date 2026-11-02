@@ -40,12 +40,14 @@ from integrations.knowledge_store import (
     list_documents,
     search_knowledge,
 )
+from integrations.model_providers import ProviderError, complete as complete_external_model, status as external_model_status
 from integrations.security_audit import SecurityAuditError, audit_local_dependencies, run_jarvis_self_audit
 from integrations.web_access import WebAccessError, read_page as read_web_page
 
 
 app = Flask(__name__, static_folder="frontend")
 app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_BYTES + 1024 * 1024
+MAX_KNOWLEDGE_NOTE_CHARS = 100_000
 SERVER_HOST = "127.0.0.1"
 SERVER_PORT = 5000
 
@@ -72,17 +74,24 @@ class ModelUnavailable(Exception):
     pass
 
 
-def _provider():
-    provider = os.environ.get("JARVIS_AI_PROVIDER", "ollama").strip().lower()
-    if provider not in {"ollama", "openai-compatible"}:
-        raise ModelUnavailable("JARVIS_AI_PROVIDER must be 'ollama' or 'openai-compatible'.")
+def _provider(requested=None):
+    provider = requested or os.environ.get("JARVIS_AI_PROVIDER", "ollama")
+    provider = provider.strip().lower()
+    if provider not in {"ollama", "openai-compatible", "gemini", "anthropic", "copilot"}:
+        raise ModelUnavailable("Choose ollama, openai-compatible, gemini, anthropic, or copilot as the AI provider.")
     return provider
 
 
 def _model_name(provider):
-    if provider == "ollama":
-        return os.environ.get("JARVIS_OLLAMA_MODEL", "qwen3-coder:30b").strip()
-    return os.environ.get("JARVIS_HOSTED_MODEL", "gpt-4o-mini").strip()
+    model_variables = {
+        "ollama": ("JARVIS_OLLAMA_MODEL", "qwen3-coder:30b"),
+        "openai-compatible": ("JARVIS_HOSTED_MODEL", "gpt-4o-mini"),
+        "gemini": ("JARVIS_GEMINI_MODEL", "gemini-3.8-flash"),
+        "anthropic": ("JARVIS_ANTHROPIC_MODEL", "claude-sonnet-5-5"),
+        "copilot": ("JARVIS_COPILOT_MODEL", "gpt-5"),
+    }
+    variable, default = model_variables[provider]
+    return os.environ.get(variable, default).strip()
 
 
 def _external_access_allowed():
@@ -253,8 +262,8 @@ def _sanitize_model_reply(reply, search_results=None):
     return re.sub(r"\n{3,}", "\n\n", reply).strip()
 
 
-def _ask_model(message, history, search_results=None, knowledge_results=None):
-    provider = _provider()
+def _ask_model(message, history, search_results=None, knowledge_results=None, provider=None):
+    provider = _provider(provider)
     model = _model_name(provider)
     messages = _conversation_messages(message, history, search_results, knowledge_results)
 
@@ -271,22 +280,28 @@ def _ask_model(message, history, search_results=None, knowledge_results=None):
         reply = response.get("message", {}).get("content")
     else:
         if not _external_access_allowed():
-            raise ModelUnavailable("Hosted AI is blocked by config/rules.json security_policy.allow_external_access.")
+            raise ModelUnavailable("External AI is blocked by config/rules.json security_policy.allow_external_access.")
         if os.environ.get("JARVIS_ALLOW_EXTERNAL_AI", "false").strip().lower() != "true":
-            raise ModelUnavailable("Set JARVIS_ALLOW_EXTERNAL_AI=true to opt in to hosted AI.")
-        api_key = os.environ.get("JARVIS_API_KEY") or os.environ.get("OPENAI_API_KEY")
-        if not api_key:
-            raise ModelUnavailable("Set JARVIS_API_KEY to use the hosted provider.")
-        base_url = os.environ.get("JARVIS_HOSTED_BASE_URL", "https://api.openai.com/v1").rstrip("/")
-        if urlsplit(base_url).scheme != "https":
-            raise ModelUnavailable("Hosted AI must use an HTTPS endpoint.")
-        response = _post_json(
-            f"{base_url}/chat/completions",
-            {"model": model, "messages": messages, "temperature": 0.7},
-            {"Authorization": f"Bearer {api_key}"},
-        )
-        choices = response.get("choices", [])
-        reply = choices[0].get("message", {}).get("content") if choices else None
+            raise ModelUnavailable("Set JARVIS_ALLOW_EXTERNAL_AI=true to opt in to external AI.")
+        if provider in {"gemini", "anthropic", "copilot"}:
+            try:
+                reply, model = complete_external_model(provider, messages)
+            except ProviderError as error:
+                raise ModelUnavailable(str(error)) from error
+        else:
+            api_key = os.environ.get("JARVIS_API_KEY") or os.environ.get("OPENAI_API_KEY")
+            if not api_key:
+                raise ModelUnavailable("Set JARVIS_API_KEY to use the hosted provider.")
+            base_url = os.environ.get("JARVIS_HOSTED_BASE_URL", "https://api.openai.com/v1").rstrip("/")
+            if urlsplit(base_url).scheme != "https":
+                raise ModelUnavailable("Hosted AI must use an HTTPS endpoint.")
+            response = _post_json(
+                f"{base_url}/chat/completions",
+                {"model": model, "messages": messages, "temperature": 0.7},
+                {"Authorization": f"Bearer {api_key}"},
+            )
+            choices = response.get("choices", [])
+            reply = choices[0].get("message", {}).get("content") if choices else None
 
     if not isinstance(reply, str) or not reply.strip():
         raise ModelUnavailable("The AI provider returned an empty response.")
@@ -295,35 +310,57 @@ def _ask_model(message, history, search_results=None, knowledge_results=None):
 
 
 def _model_status():
+    provider_status = external_model_status()
+    provider_status["openai-compatible"] = {
+        "model": os.environ.get("JARVIS_HOSTED_MODEL", "gpt-4o-mini"),
+        "configured": bool(os.environ.get("JARVIS_API_KEY") or os.environ.get("OPENAI_API_KEY")),
+        "detail": "Uses the configured OpenAI-compatible endpoint.",
+    }
+    external_enabled = (
+        _external_access_allowed()
+        and os.environ.get("JARVIS_ALLOW_EXTERNAL_AI", "false").strip().lower() == "true"
+    )
     try:
         provider = _provider()
     except ModelUnavailable as error:
-        return {"provider": "unknown", "model": "", "ready": False, "detail": str(error)}
+        return {"provider": "unknown", "model": "", "ready": False, "detail": str(error), "providers": provider_status, "external_enabled": external_enabled}
     model = _model_name(provider)
-    if provider == "openai-compatible":
-        enabled = (
-            _external_access_allowed()
-            and os.environ.get("JARVIS_ALLOW_EXTERNAL_AI", "false").strip().lower() == "true"
-        )
-        configured = bool(os.environ.get("JARVIS_API_KEY") or os.environ.get("OPENAI_API_KEY"))
+    if provider != "ollama":
+        enabled = external_enabled
+        if provider == "openai-compatible":
+            configured = bool(os.environ.get("JARVIS_API_KEY") or os.environ.get("OPENAI_API_KEY"))
+        else:
+            configured = provider_status[provider]["configured"]
+        ready = enabled and configured
         return {
             "provider": provider,
             "model": model,
-            "ready": enabled and configured,
-            "detail": "ready" if enabled and configured else "hosted AI requires explicit opt-in and an API key",
+            "ready": ready,
+            "detail": "ready" if ready else "external AI requires explicit opt-in, an allowed policy, and provider setup",
+            "providers": provider_status,
+            "external_enabled": external_enabled,
         }
 
     try:
         with urlopen(f"{_ollama_base_url()}/api/tags", timeout=1) as response:
             installed_models = json.loads(response.read().decode("utf-8")).get("models", [])
     except (ModelUnavailable, URLError, TimeoutError, OSError, UnicodeDecodeError, json.JSONDecodeError):
-        return {"provider": provider, "model": model, "ready": False, "detail": "Ollama is not reachable"}
+        return {
+            "provider": provider,
+            "model": model,
+            "ready": False,
+            "detail": "Ollama is not reachable",
+            "providers": provider_status,
+            "external_enabled": external_enabled,
+        }
     ready = any(item.get("name") == model for item in installed_models)
     return {
         "provider": provider,
         "model": model,
         "ready": ready,
         "detail": "ready" if ready else f"model {model} is not installed in Ollama",
+        "providers": provider_status,
+        "external_enabled": external_enabled,
     }
 
 
@@ -344,6 +381,21 @@ def _requested_url(message):
     return match.group(0).rstrip(".,;:!?)]}") if match else None
 
 
+def _explicit_memory_note(message):
+    match = re.match(
+        r"^\s*(?:jarvis[,:]\s*)?(?:remember|save|learn)\s+(?:this|that)\s*[:,]?\s*(.+?)\s*$",
+        message,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    if not match:
+        match = re.match(
+            r"^\s*(?:jarvis[,:]\s*)?(?:remember|save|learn)\s*:\s*(.+?)\s*$",
+            message,
+            flags=re.IGNORECASE | re.DOTALL,
+        )
+    return match.group(1).strip() if match and match.group(1).strip() else None
+
+
 def _local_command_response(message):
     text = " ".join(message.strip().lower().replace("_", " ").split())
     if not text:
@@ -354,6 +406,7 @@ def _local_command_response(message):
             "reply": (
                 "I can answer general questions, search the web when you ask for current information, "
                 "and control Home Assistant devices that you explicitly allow. Device actions require confirmation. "
+                "Say 'remember that ...' to save a note locally for future retrieval. "
                 "Use commands beginning with 'simulate' to try the local test devices."
             )
         }
@@ -403,7 +456,7 @@ def _local_command_response(message):
     return None
 
 
-def respond_to(message, history=None):
+def respond_to(message, history=None, provider=None):
     try:
         pending_action = resolve_control_request(message)
     except HomeAssistantError as error:
@@ -415,10 +468,30 @@ def respond_to(message, history=None):
             "pending_action": pending_action,
         }
 
+    note_content = _explicit_memory_note(message)
+    if note_content:
+        title = next((line.strip() for line in note_content.splitlines() if line.strip()), "Pasted chat note")[:300]
+        source = f"chat-note:{title}"
+        try:
+            saved = index_document(source, title, note_content, "note")
+        except KnowledgeStoreError as error:
+            return {"reply": f"I couldn't save that note to local memory. {error}", "source": "local memory unavailable"}
+        return {
+            "reply": f"Saved '{title}' to local knowledge. I can retrieve it in later chats; this stores text and does not train the model.",
+            "source": "local memory",
+            "memory_saved": True,
+            "sources": [{"title": title, "source": source, "document_id": saved["document_id"], "kind": "library"}],
+        }
+
     local_response = _local_command_response(message)
     if local_response is not None:
         local_response["source"] = "local command"
         return local_response
+
+    try:
+        selected_provider = _provider(provider)
+    except ModelUnavailable as error:
+        return {"reply": str(error), "source": "unavailable"}
 
     search_results = None
     knowledge_results = []
@@ -454,7 +527,7 @@ def respond_to(message, history=None):
         if not search_results:
             return {"reply": "The web search returned no usable results.", "source": "brave search", "sources": []}
 
-    if _provider() == "ollama" and not _requires_web_fetch(message):
+    if selected_provider == "ollama" and not _requires_web_fetch(message):
         retrieval_query = message
         if isinstance(history, list):
             prior_user_text = [
@@ -469,7 +542,7 @@ def respond_to(message, history=None):
             knowledge_results = []
 
     try:
-        reply, provider, model = _ask_model(message, history, search_results, knowledge_results)
+        reply, provider, model = _ask_model(message, history, search_results, knowledge_results, selected_provider)
         public_sources = [
             {
                 "title": item["title"],
@@ -660,6 +733,29 @@ def add_knowledge():
     return jsonify(result), 201
 
 
+@app.post("/api/knowledge/note")
+def add_knowledge_note():
+    if not _local_settings_origin():
+        return jsonify({"error": "Notes can only be saved from this local Jarvis page."}), 403
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        return jsonify({"error": "Send a JSON object with a title and content."}), 400
+    title = payload.get("title")
+    content = payload.get("content")
+    if not isinstance(title, str) or not title.strip() or len(title) > 300:
+        return jsonify({"error": "Enter a title of 1-300 characters."}), 400
+    if not isinstance(content, str) or not content.strip():
+        return jsonify({"error": "Paste some text to save."}), 400
+    if len(content) > MAX_KNOWLEDGE_NOTE_CHARS:
+        return jsonify({"error": "Notes are limited to 100,000 characters."}), 413
+    source = f"pasted-note:{title.strip()}"
+    try:
+        indexed = index_document(source, title.strip(), content, "note")
+    except KnowledgeStoreError as error:
+        return jsonify({"error": str(error)}), 503
+    return jsonify({**indexed, "title": title.strip(), "source": source, "document_type": "note"}), 201
+
+
 @app.delete("/api/knowledge/<int:document_id>")
 def remove_knowledge(document_id):
     if not _local_settings_origin():
@@ -795,7 +891,14 @@ def command():
     if not isinstance(history, list):
         return jsonify({"error": "Conversation history must be a list."}), 400
 
-    result = respond_to(message, history)
+    try:
+        provider = _provider(payload.get("provider"))
+    except (AttributeError, ModelUnavailable) as error:
+        return jsonify({"error": str(error) or "The AI provider must be text."}), 400
+    if provider != "ollama" and payload.get("external_confirmed") is not True:
+        return jsonify({"error": "Confirm that this prompt and recent conversation may be sent to the selected external AI provider."}), 400
+
+    result = respond_to(message, history, provider)
     result["status"] = "success"
     return jsonify(result)
 

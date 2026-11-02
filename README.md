@@ -24,7 +24,9 @@ To read a specific page, ask Jarvis to open/read/summarize it and include its `h
 
 ## Saved Knowledge
 
-Use the **Saved knowledge** panel to import files or remember an HTTPS page. Pages read in chat are added automatically. Supported files: TXT, Markdown, HTML, CSV, PDF, DOCX, PPTX, XLSX, and common image formats. Uploads are limited to 25 MB; PDFs are limited to 50 pages.
+Use the **Saved knowledge** panel to import files, remember an HTTPS page, or paste a titled note. You can paste selected material from another AI service; Jarvis does not call that service or ingest its private data. Pages read in chat are added automatically. Supported files: TXT, Markdown, HTML, CSV, PDF, DOCX, PPTX, XLSX, and common image formats. Uploads are limited to 25 MB; PDFs are limited to 50 pages.
+
+In voice or chat, explicitly say `Remember that ...` or `Save this: ...` to add a short note directly. Jarvis confirms the save and can retrieve it in later chats. This stores searchable text locally; it does not train or update the model weights.
 
 Jarvis stores extracted text and source metadata, not the original uploaded files, in `%LOCALAPPDATA%\JarvisCore\knowledge.sqlite3`. Set `JARVIS_KNOWLEDGE_DB` before launch to choose another database path. It uses local SQLite full-text search to retrieve relevant passages and cite their source in later answers; it does not retrain the language model. Saved excerpts are only sent to local Ollama, never to the optional hosted model. Use **Remove** beside a source to delete its extracted text and search index.
 
