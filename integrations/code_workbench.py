@@ -15,10 +15,39 @@ from urllib.request import Request, urlopen
 
 _JARVIS_ROOT = Path(__file__).resolve().parents[1]
 _RULES_PATH = _JARVIS_ROOT / "config" / "rules.json"
-_MAX_SOURCE_CHARS = 20_000
-_MAX_INSTRUCTION_CHARS = 2_000
+_MAX_SOURCE_CHARS = 50_000
+_MAX_INSTRUCTION_CHARS = 5_000
 _DRAFT_TTL_SECONDS = 600
 _ALLOWED_LANGUAGES = {
+    ".txt": "Text",
+    ".md": "Markdown",
+    ".markdown": "Markdown",
+    ".rst": "reStructuredText",
+    ".json": "JSON",
+    ".yaml": "YAML",
+    ".yml": "YAML",
+    ".toml": "TOML",
+    ".xml": "XML",
+    ".html": "HTML",
+    ".htm": "HTML",
+    ".css": "CSS",
+    ".scss": "SCSS",
+    ".sql": "SQL",
+    ".ini": "INI",
+    ".cfg": "Configuration",
+    ".conf": "Configuration",
+    ".sh": "Shell script",
+    ".ps1": "PowerShell script",
+    ".bat": "Batch script",
+    ".cmd": "Batch script",
+    ".java": "Java",
+    ".go": "Go",
+    ".rs": "Rust",
+    ".rb": "Ruby",
+    ".cs": "C#",
+    ".ts": "TypeScript",
+    ".tsx": "TypeScript React",
+    ".jsx": "JavaScript React",
     ".py": "Python",
     ".lua": "Lua",
     ".php": "PHP",
@@ -66,12 +95,74 @@ def workspace_root():
     return root
 
 
+def configure_workspace_root(configured_path):
+    if not isinstance(configured_path, str) or not configured_path.strip() or len(configured_path) > 1000:
+        raise CodeWorkbenchError("Provide an absolute folder path for the editable workspace.")
+    requested = Path(configured_path.strip()).expanduser()
+    if not requested.is_absolute():
+        raise CodeWorkbenchError("The editable workspace path must be absolute.")
+    if requested.exists() and requested.is_symlink():
+        raise CodeWorkbenchError("Choose a real folder, not a symbolic link, as the workspace.")
+    root = requested.resolve(strict=False)
+    jarvis_root = _JARVIS_ROOT.resolve(strict=True)
+    if root == Path(root.anchor) or root == jarvis_root or root.is_relative_to(jarvis_root) or jarvis_root.is_relative_to(root):
+        raise CodeWorkbenchError("Choose a workspace folder separate from the Jarvis application and filesystem root.")
+    windows_root = Path(os.environ.get("WINDIR", "C:/Windows")).resolve(strict=False)
+    if os.name == "nt" and (root == windows_root or root.is_relative_to(windows_root)):
+        raise CodeWorkbenchError("The Windows system folder cannot be used as a code workspace.")
+    try:
+        root.mkdir(parents=True, exist_ok=True)
+    except OSError as error:
+        raise CodeWorkbenchError("Jarvis could not create or access that workspace folder.") from error
+    if not root.is_dir() or root.is_symlink():
+        raise CodeWorkbenchError("The editable workspace must be a real folder, not a symbolic link.")
+    if not os.access(root, os.W_OK | os.X_OK):
+        raise CodeWorkbenchError(
+            "The Jarvis service cannot write to that folder. On Ubuntu, grant access with the owner/group and a systemd ReadWritePaths entry."
+        )
+
+    with _DRAFT_LOCK:
+        try:
+            with _RULES_PATH.open(encoding="utf-8") as rules_file:
+                rules = json.load(rules_file)
+        except (OSError, json.JSONDecodeError) as error:
+            raise CodeWorkbenchError("config/rules.json is missing or invalid JSON.") from error
+        if not isinstance(rules, dict):
+            raise CodeWorkbenchError("config/rules.json must contain a JSON object.")
+        workbench = rules.setdefault("code_workbench", {})
+        if not isinstance(workbench, dict):
+            raise CodeWorkbenchError("code_workbench in config/rules.json must be an object.")
+        workbench["workspace_root"] = str(root)
+        temporary_path = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                newline="\n",
+                dir=_RULES_PATH.parent,
+                prefix="rules-",
+                suffix=".tmp",
+                delete=False,
+            ) as temporary_file:
+                temporary_path = Path(temporary_file.name)
+                json.dump(rules, temporary_file, ensure_ascii=False, indent=2)
+                temporary_file.write("\n")
+            os.replace(temporary_path, _RULES_PATH)
+        except OSError as error:
+            raise CodeWorkbenchError("Jarvis could not save the workspace folder setting.") from error
+        finally:
+            if temporary_path and temporary_path.exists():
+                temporary_path.unlink()
+        _DRAFTS.clear()
+    return root
+
+
 def _validated_path(relative_path):
     if not isinstance(relative_path, str) or not relative_path.strip() or len(relative_path) > 500:
         raise CodeWorkbenchError("Provide a project-relative source file path.")
     candidate = Path(relative_path.replace("\\", "/"))
     if candidate.is_absolute() or candidate.drive or candidate.anchor or any(part in {"", ".", ".."} for part in candidate.parts):
-        raise CodeWorkbenchError("Use a normalized relative path inside the Jarvis project.")
+        raise CodeWorkbenchError("Use a normalized relative path inside the configured workspace.")
     extension = candidate.suffix.lower()
     if extension not in _ALLOWED_LANGUAGES:
         raise CodeWorkbenchError("This workbench supports Lua, PHP, JavaScript, C/C++, and Python source files only.")
@@ -82,16 +173,16 @@ def _validated_path(relative_path):
 
     project_root = workspace_root()
     resolved = project_root.joinpath(*candidate.parts)
-    if not resolved.parent.exists() or not resolved.parent.is_dir():
-        raise CodeWorkbenchError("The parent folder must already exist inside the Jarvis project.")
     current = project_root
     for part in candidate.parts:
         current = current / part
         if current.is_symlink():
             raise CodeWorkbenchError("Symbolic links are not editable through the code workbench.")
+        if current.exists() and not current.is_dir() and current != resolved:
+            raise CodeWorkbenchError("A parent path component is not a folder.")
     resolved = resolved.resolve(strict=False)
     if not resolved.is_relative_to(project_root) or (resolved.exists() and not resolved.is_file()):
-        raise CodeWorkbenchError("The target must be a source file inside the Jarvis project.")
+        raise CodeWorkbenchError("The target must be a supported text file inside the configured workspace.")
     return normalized, resolved, extension, resolved.exists()
 
 
@@ -216,6 +307,18 @@ def apply_draft(draft_id):
         raise CodeSourceChanged("The source changed after the diff was created. Draft a new revision before applying.")
 
     project_root = workspace_root()
+    missing_directories = []
+    directory = source_path.parent
+    while directory != project_root and not directory.exists():
+        missing_directories.append(directory.relative_to(project_root).as_posix())
+        directory = directory.parent
+    try:
+        source_path.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as error:
+        raise CodeWorkbenchError("Jarvis could not create the requested project folders.") from error
+    normalized_after_create, validated_path, _, _ = _validated_path(draft["path"])
+    if normalized_after_create != normalized or validated_path != source_path:
+        raise CodeWorkbenchError("The project path changed while preparing the reviewed revision.")
     backup_root = project_root / ".jarvis_backups"
     if backup_root.is_symlink():
         raise CodeWorkbenchError("The backup folder cannot be a symbolic link.")
@@ -252,5 +355,6 @@ def apply_draft(draft_id):
         "path": normalized,
         "created": draft["new_file"],
         "backup": backup_path.relative_to(project_root).as_posix() if backup_path else None,
+        "created_directories": list(reversed(missing_directories)),
         "restart_required": False,
     }

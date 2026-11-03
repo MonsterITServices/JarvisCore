@@ -14,15 +14,18 @@ from flask import Flask, jsonify, request, send_from_directory
 from devices.home_assistant import (
     HomeAssistantError,
     call_allowed_service,
+    discover_entities as home_assistant_discover_entities,
     list_allowed_entities,
     resolve_control_request,
     status as home_assistant_status,
+    test_connection as home_assistant_test_connection,
 )
 from integrations.brave_search import BraveSearchError, is_configured as brave_search_configured, search as brave_search
 from integrations.code_workbench import (
     CodeSourceChanged,
     CodeWorkbenchError,
     apply_draft as apply_code_draft,
+    configure_workspace_root as configure_code_workspace,
     create_draft as create_code_draft,
     workspace_root as code_workspace_root,
 )
@@ -41,6 +44,7 @@ from integrations.knowledge_store import (
     search_knowledge,
 )
 from integrations.model_providers import ProviderError, complete as complete_external_model, status as external_model_status
+from integrations.secret_store import SecretStoreError, get_secret, get_setting, set_secret, set_setting
 from integrations.security_audit import SecurityAuditError, audit_local_dependencies, run_jarvis_self_audit
 from integrations.web_access import WebAccessError, read_page as read_web_page
 
@@ -75,7 +79,13 @@ class ModelUnavailable(Exception):
 
 
 def _provider(requested=None):
-    provider = requested or os.environ.get("JARVIS_AI_PROVIDER", "ollama")
+    if requested:
+        provider = requested
+    else:
+        try:
+            provider = get_setting("default_provider", os.environ.get("JARVIS_AI_PROVIDER", "ollama"))
+        except SecretStoreError:
+            provider = os.environ.get("JARVIS_AI_PROVIDER", "ollama")
     provider = provider.strip().lower()
     if provider not in {"ollama", "openai-compatible", "gemini", "anthropic", "copilot"}:
         raise ModelUnavailable("Choose ollama, openai-compatible, gemini, anthropic, or copilot as the AI provider.")
@@ -91,7 +101,21 @@ def _model_name(provider):
         "copilot": ("JARVIS_COPILOT_MODEL", "gpt-5"),
     }
     variable, default = model_variables[provider]
-    return os.environ.get(variable, default).strip()
+    try:
+        saved_models = get_setting("models", {}) if provider != "ollama" else {}
+    except SecretStoreError:
+        saved_models = {}
+    saved_model = saved_models.get(provider) if isinstance(saved_models, dict) else None
+    return os.environ.get(variable, saved_model or default).strip()
+
+
+def _external_ai_enabled():
+    if os.environ.get("JARVIS_ALLOW_EXTERNAL_AI", "false").strip().lower() == "true":
+        return True
+    try:
+        return get_setting("external_ai_enabled", False) is True
+    except SecretStoreError:
+        return False
 
 
 def _external_access_allowed():
@@ -121,6 +145,33 @@ def _save_hard_rules(hard_rules):
         if not isinstance(profile, dict):
             raise ValueError("assistant_profile in config/rules.json must be an object.")
         profile["hard_rules"] = hard_rules
+        temporary_path = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                newline="\n",
+                dir=_RULES_PATH.parent,
+                prefix="rules-",
+                suffix=".tmp",
+                delete=False,
+            ) as temporary_file:
+                temporary_path = Path(temporary_file.name)
+                json.dump(rules, temporary_file, ensure_ascii=False, indent=2)
+                temporary_file.write("\n")
+            os.replace(temporary_path, _RULES_PATH)
+        finally:
+            if temporary_path and temporary_path.exists():
+                temporary_path.unlink()
+
+
+def _update_rules_section(section, updates):
+    with _rules_lock:
+        rules = _load_rules()
+        current = rules.setdefault(section, {})
+        if not isinstance(current, dict):
+            raise ValueError(f"{section} in config/rules.json must be an object.")
+        current.update(updates)
         temporary_path = None
         try:
             with tempfile.NamedTemporaryFile(
@@ -281,15 +332,18 @@ def _ask_model(message, history, search_results=None, knowledge_results=None, pr
     else:
         if not _external_access_allowed():
             raise ModelUnavailable("External AI is blocked by config/rules.json security_policy.allow_external_access.")
-        if os.environ.get("JARVIS_ALLOW_EXTERNAL_AI", "false").strip().lower() != "true":
-            raise ModelUnavailable("Set JARVIS_ALLOW_EXTERNAL_AI=true to opt in to external AI.")
+        if not _external_ai_enabled():
+            raise ModelUnavailable("Enable external AI in Jarvis settings before sending a prompt to a hosted provider.")
         if provider in {"gemini", "anthropic", "copilot"}:
             try:
                 reply, model = complete_external_model(provider, messages)
             except ProviderError as error:
                 raise ModelUnavailable(str(error)) from error
         else:
-            api_key = os.environ.get("JARVIS_API_KEY") or os.environ.get("OPENAI_API_KEY")
+            try:
+                api_key = get_secret("openai-compatible") or os.environ.get("JARVIS_API_KEY") or os.environ.get("OPENAI_API_KEY")
+            except SecretStoreError as error:
+                raise ModelUnavailable(str(error)) from error
             if not api_key:
                 raise ModelUnavailable("Set JARVIS_API_KEY to use the hosted provider.")
             base_url = os.environ.get("JARVIS_HOSTED_BASE_URL", "https://api.openai.com/v1").rstrip("/")
@@ -310,16 +364,20 @@ def _ask_model(message, history, search_results=None, knowledge_results=None, pr
 
 
 def _model_status():
-    provider_status = external_model_status()
+    try:
+        provider_status = external_model_status()
+    except SecretStoreError:
+        provider_status = {
+            "gemini": {"model": _model_name("gemini"), "configured": False},
+            "anthropic": {"model": _model_name("anthropic"), "configured": False},
+            "copilot": {"model": _model_name("copilot"), "configured": False},
+        }
     provider_status["openai-compatible"] = {
         "model": os.environ.get("JARVIS_HOSTED_MODEL", "gpt-4o-mini"),
-        "configured": bool(os.environ.get("JARVIS_API_KEY") or os.environ.get("OPENAI_API_KEY")),
+        "configured": bool(get_secret("openai-compatible") or os.environ.get("JARVIS_API_KEY") or os.environ.get("OPENAI_API_KEY")),
         "detail": "Uses the configured OpenAI-compatible endpoint.",
     }
-    external_enabled = (
-        _external_access_allowed()
-        and os.environ.get("JARVIS_ALLOW_EXTERNAL_AI", "false").strip().lower() == "true"
-    )
+    external_enabled = _external_access_allowed() and _external_ai_enabled()
     try:
         provider = _provider()
     except ModelUnavailable as error:
@@ -328,7 +386,7 @@ def _model_status():
     if provider != "ollama":
         enabled = external_enabled
         if provider == "openai-compatible":
-            configured = bool(os.environ.get("JARVIS_API_KEY") or os.environ.get("OPENAI_API_KEY"))
+            configured = bool(get_secret("openai-compatible") or os.environ.get("JARVIS_API_KEY") or os.environ.get("OPENAI_API_KEY"))
         else:
             configured = provider_status[provider]["configured"]
         ready = enabled and configured
@@ -593,6 +651,157 @@ def _local_settings_origin():
         and parsed.netloc.casefold() == request.host.casefold()
         and parsed.scheme == request.scheme
     )
+
+
+@app.get("/api/settings")
+def get_settings():
+    try:
+        provider_status = external_model_status()
+        provider_status["openai-compatible"] = {
+            "model": _model_name("openai-compatible"),
+            "configured": bool(get_secret("openai-compatible") or os.environ.get("JARVIS_API_KEY") or os.environ.get("OPENAI_API_KEY")),
+        }
+        return jsonify({
+            "ai": _model_status(),
+            "external_ai_enabled": _external_ai_enabled(),
+            "external_ai_allowed": _external_access_allowed(),
+            "default_provider": _provider(),
+            "providers": provider_status,
+            "home_assistant": {
+                **home_assistant_status(),
+                "url": get_secret("home_assistant_url") or os.environ.get("JARVIS_HA_URL", ""),
+                "allowed_entities": sorted(_load_rules().get("home_assistant", {}).get("allowed_entities", [])),
+            },
+            "workspace": str(code_workspace_root()),
+        })
+    except (CodeWorkbenchError, SecretStoreError, ValueError) as error:
+        return jsonify({"error": str(error)}), 503
+
+
+@app.post("/api/settings/ai")
+def save_ai_settings():
+    if not _local_settings_origin():
+        return jsonify({"error": "AI settings can only be edited from this local Jarvis page."}), 403
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        return jsonify({"error": "Send a JSON object containing AI settings."}), 400
+
+    provider = payload.get("provider")
+    if provider not in {"openai-compatible", "gemini", "anthropic", "copilot"}:
+        return jsonify({"error": "Choose a supported hosted provider."}), 400
+    api_key = payload.get("api_key", "")
+    if not isinstance(api_key, str) or len(api_key) > 10000:
+        return jsonify({"error": "Provider credentials must be text under 10000 characters."}), 400
+    model = payload.get("model", "")
+    if not isinstance(model, str):
+        return jsonify({"error": "The model name must be text."}), 400
+    model = model.strip()
+    if model and (len(model) > 120 or not re.fullmatch(r"[A-Za-z0-9._:/-]+", model)):
+        return jsonify({"error": "Use a valid provider model identifier."}), 400
+    external_enabled = payload.get("external_ai_enabled")
+    if external_enabled is not None and not isinstance(external_enabled, bool):
+        return jsonify({"error": "external_ai_enabled must be true or false."}), 400
+    default_provider = payload.get("default_provider")
+    if default_provider is not None:
+        try:
+            default_provider = _provider(default_provider)
+        except (AttributeError, ModelUnavailable) as error:
+            return jsonify({"error": str(error)}), 400
+
+    try:
+        if payload.get("clear_key") is True:
+            set_secret(provider, "")
+        elif api_key.strip():
+            set_secret(provider, api_key.strip())
+        if model:
+            models = get_setting("models", {})
+            if not isinstance(models, dict):
+                models = {}
+            models[provider] = model
+            set_setting("models", models)
+        if external_enabled is not None:
+            set_setting("external_ai_enabled", external_enabled)
+        if default_provider is not None:
+            set_setting("default_provider", default_provider)
+        status = external_model_status()
+        provider_info = status.get(provider, {})
+        if provider == "openai-compatible":
+            provider_info = {"configured": bool(get_secret(provider) or os.environ.get("JARVIS_API_KEY") or os.environ.get("OPENAI_API_KEY"))}
+        return jsonify({
+            "saved": True,
+            "provider": provider,
+            "model": _model_name(provider),
+            "configured": bool(provider_info.get("configured")),
+            "external_ai_enabled": _external_ai_enabled(),
+        })
+    except SecretStoreError as error:
+        return jsonify({"error": str(error)}), 503
+
+
+@app.post("/api/settings/ai/test")
+def test_ai_provider():
+    if not _local_settings_origin():
+        return jsonify({"error": "Provider tests can only be run from this local Jarvis page."}), 403
+    payload = request.get_json(silent=True)
+    try:
+        provider = _provider(payload.get("provider") if isinstance(payload, dict) else None)
+        reply, provider, model = _ask_model("Reply with the single word: ready", [], provider=provider)
+    except (AttributeError, ModelUnavailable) as error:
+        return jsonify({"ok": False, "error": str(error) or "Choose a valid provider."}), 200
+    return jsonify({"ok": True, "provider": provider, "model": model, "reply": reply[:80]})
+
+
+@app.post("/api/settings/home-assistant")
+def save_home_assistant_settings():
+    if not _local_settings_origin():
+        return jsonify({"error": "Home Assistant settings can only be edited from this local Jarvis page."}), 403
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        return jsonify({"error": "Send Home Assistant connection settings as a JSON object."}), 400
+    url = payload.get("url", "")
+    token = payload.get("token", "")
+    selected_entities = payload.get("allowed_entities", [])
+    if not isinstance(url, str) or len(url) > 500 or not isinstance(token, str) or len(token) > 10000:
+        return jsonify({"error": "Provide a valid Home Assistant URL and token."}), 400
+    if not isinstance(selected_entities, list) or len(selected_entities) > 500 or any(not isinstance(item, str) for item in selected_entities):
+        return jsonify({"error": "Choose a valid list of Home Assistant entities."}), 400
+    try:
+        effective_url = url.strip() or get_secret("home_assistant_url") or os.environ.get("JARVIS_HA_URL", "")
+        effective_token = token.strip() or get_secret("home_assistant_token") or os.environ.get("JARVIS_HA_TOKEN", "")
+        home_assistant_test_connection(effective_url, effective_token)
+        discovered = home_assistant_discover_entities(effective_url, effective_token)
+        discovered_ids = {item["entity_id"] for item in discovered}
+        if not set(selected_entities).issubset(discovered_ids):
+            return jsonify({"error": "An allowlisted entity is not in the current Home Assistant device list."}), 400
+        set_secret("home_assistant_url", effective_url.rstrip("/"))
+        if token.strip():
+            set_secret("home_assistant_token", token.strip())
+        _update_rules_section("home_assistant", {"allowed_entities": sorted(set(selected_entities))})
+        return jsonify({
+            "connected": True,
+            "url": effective_url.rstrip("/"),
+            "entities": discovered,
+            "allowed_entities": sorted(set(selected_entities)),
+            "status": home_assistant_status(),
+        })
+    except (HomeAssistantError, SecretStoreError, ValueError) as error:
+        return jsonify({"error": str(error)}), 400
+
+
+@app.post("/api/settings/workspace")
+def save_workspace_settings():
+    if not _local_settings_origin():
+        return jsonify({"error": "Workspace settings can only be edited from this local Jarvis page."}), 403
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict) or not isinstance(payload.get("workspace"), str):
+        return jsonify({"error": "Provide an absolute folder path for the editable workspace."}), 400
+    try:
+        workspace = configure_code_workspace(payload["workspace"])
+    except CodeWorkbenchError as error:
+        return jsonify({"error": str(error)}), 400
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 503
+    return jsonify({"workspace": str(workspace), "execution_enabled": False})
 
 
 @app.get("/api/assistant-rules")

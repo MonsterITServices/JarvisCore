@@ -7,6 +7,8 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
+from integrations.secret_store import SecretStoreError, get_secret, get_setting
+
 
 class ProviderError(Exception):
     pass
@@ -21,7 +23,9 @@ _PROVIDER_MODELS = {
 
 def _model(provider):
     variable, default = _PROVIDER_MODELS[provider]
-    model = os.environ.get(variable, default).strip()
+    configured_models = get_setting("models", {})
+    saved_model = configured_models.get(provider) if isinstance(configured_models, dict) else None
+    model = os.environ.get(variable, saved_model or default).strip()
     if not model or not re.fullmatch(r"[A-Za-z0-9._-]+", model):
         raise ProviderError(f"{variable} must contain a valid model name.")
     return model
@@ -38,15 +42,24 @@ def _post_json(url, payload, headers):
         with urlopen(http_request, timeout=120) as response:
             return json.loads(response.read().decode("utf-8"))
     except HTTPError as error:
-        raise ProviderError(f"The provider returned HTTP {error.code}.") from error
+        detail = ""
+        try:
+            body = json.loads(error.read().decode("utf-8"))
+            message = body.get("error", {}).get("message") if isinstance(body.get("error"), dict) else body.get("message")
+            detail = f" {str(message)[:200]}" if message else ""
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError, AttributeError):
+            pass
+        hint = " The key was rejected; check it and the model name." if error.code in {400, 401, 403, 404} else ""
+        raise ProviderError(f"The provider returned HTTP {error.code}.{detail}{hint}") from error
     except (URLError, TimeoutError, OSError) as error:
-        raise ProviderError("The provider could not be reached or timed out.") from error
+        reason = getattr(error, "reason", error)
+        raise ProviderError(f"The server could not reach the provider ({str(reason)[:150]}). Check DNS and outbound HTTPS from this machine.") from error
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
         raise ProviderError("The provider returned an invalid response.") from error
 
 
 def _ask_gemini(messages):
-    api_key = os.environ.get("GEMINI_API_KEY", "").strip()
+    api_key = (get_secret("gemini") or os.environ.get("GEMINI_API_KEY", "")).strip()
     if not api_key:
         raise ProviderError("Set GEMINI_API_KEY in the server environment to use Gemini.")
     model = _model("gemini")
@@ -74,7 +87,7 @@ def _ask_gemini(messages):
 
 
 def _ask_anthropic(messages):
-    api_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+    api_key = (get_secret("anthropic") or os.environ.get("ANTHROPIC_API_KEY", "")).strip()
     if not api_key:
         raise ProviderError("Set ANTHROPIC_API_KEY in the server environment to use Claude.")
     model = _model("anthropic")
@@ -100,6 +113,7 @@ def _ask_copilot(messages):
     if importlib.util.find_spec("copilot") is None:
         raise ProviderError("Install github-copilot-sdk and configure Copilot CLI authentication to use GitHub Copilot.")
     model = _model("copilot")
+    github_token = (get_secret("copilot") or os.environ.get("JARVIS_COPILOT_TOKEN", "")).strip()
     system = next((item["content"] for item in messages if item.get("role") == "system"), "")
     prompt = "\n\n".join(
         f"{item['role'].upper()}: {item['content']}"
@@ -110,7 +124,11 @@ def _ask_copilot(messages):
     async def run_session():
         from copilot import CopilotClient
 
-        async with CopilotClient(mode="empty") as client:
+        async with CopilotClient(
+            mode="empty",
+            github_token=github_token or None,
+            use_logged_in_user=not bool(github_token),
+        ) as client:
             async with await client.create_session(
                 model=model,
                 available_tools=[],
@@ -134,29 +152,36 @@ def _ask_copilot(messages):
 
 
 def complete(provider, messages):
-    if provider == "gemini":
-        return _ask_gemini(messages)
-    if provider == "anthropic":
-        return _ask_anthropic(messages)
-    if provider == "copilot":
-        return _ask_copilot(messages)
-    raise ProviderError("The requested AI provider is not supported.")
+    try:
+        if provider == "gemini":
+            return _ask_gemini(messages)
+        if provider == "anthropic":
+            return _ask_anthropic(messages)
+        if provider == "copilot":
+            return _ask_copilot(messages)
+        raise ProviderError("The requested AI provider is not supported.")
+    except SecretStoreError as error:
+        raise ProviderError("The local credential vault is unavailable; local Ollama is unaffected.") from error
 
 
 def status():
     copilot_installed = importlib.util.find_spec("copilot") is not None
+    configured_models = get_setting("models", {})
+    if not isinstance(configured_models, dict):
+        configured_models = {}
+    stored_copilot_token = get_secret("copilot") or os.environ.get("JARVIS_COPILOT_TOKEN", "")
     return {
         "gemini": {
-            "model": os.environ.get("JARVIS_GEMINI_MODEL", _PROVIDER_MODELS["gemini"][1]),
-            "configured": bool(os.environ.get("GEMINI_API_KEY", "").strip()),
+            "model": os.environ.get("JARVIS_GEMINI_MODEL", configured_models.get("gemini", _PROVIDER_MODELS["gemini"][1])),
+            "configured": bool(get_secret("gemini") or os.environ.get("GEMINI_API_KEY", "").strip()),
         },
         "anthropic": {
-            "model": os.environ.get("JARVIS_ANTHROPIC_MODEL", _PROVIDER_MODELS["anthropic"][1]),
-            "configured": bool(os.environ.get("ANTHROPIC_API_KEY", "").strip()),
+            "model": os.environ.get("JARVIS_ANTHROPIC_MODEL", configured_models.get("anthropic", _PROVIDER_MODELS["anthropic"][1])),
+            "configured": bool(get_secret("anthropic") or os.environ.get("ANTHROPIC_API_KEY", "").strip()),
         },
         "copilot": {
-            "model": os.environ.get("JARVIS_COPILOT_MODEL", _PROVIDER_MODELS["copilot"][1]),
-            "configured": copilot_installed,
+            "model": os.environ.get("JARVIS_COPILOT_MODEL", configured_models.get("copilot", _PROVIDER_MODELS["copilot"][1])),
+            "configured": copilot_installed and bool(stored_copilot_token),
             "detail": "SDK installed; authentication is checked when you ask Copilot." if copilot_installed else "Install github-copilot-sdk to enable Copilot.",
         },
     }

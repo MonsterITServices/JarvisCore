@@ -7,6 +7,8 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
+from integrations.secret_store import SecretStoreError, get_secret
+
 
 _RULES_PATH = Path(__file__).resolve().parents[1] / "config" / "rules.json"
 _VISIBLE_ATTRIBUTES = {
@@ -54,9 +56,12 @@ def _allowed_services(domain):
     )
 
 
-def _base_url():
-    base_url = os.environ.get("JARVIS_HA_URL", "").rstrip("/")
-    token = os.environ.get("JARVIS_HA_TOKEN", "")
+def _base_url(base_url=None, token=None):
+    try:
+        base_url = (base_url or get_secret("home_assistant_url") or os.environ.get("JARVIS_HA_URL", "")).rstrip("/")
+        token = token or get_secret("home_assistant_token") or os.environ.get("JARVIS_HA_TOKEN", "")
+    except SecretStoreError as error:
+        raise HomeAssistantError("The local credential vault is unavailable.") from error
     if not base_url or not token:
         raise HomeAssistantError("Set JARVIS_HA_URL and JARVIS_HA_TOKEN after Home Assistant is installed.")
 
@@ -81,7 +86,13 @@ def _base_url():
 
 
 def status():
-    configured = bool(os.environ.get("JARVIS_HA_URL") and os.environ.get("JARVIS_HA_TOKEN"))
+    try:
+        configured = bool(
+            (get_secret("home_assistant_url") or os.environ.get("JARVIS_HA_URL"))
+            and (get_secret("home_assistant_token") or os.environ.get("JARVIS_HA_TOKEN"))
+        )
+    except SecretStoreError:
+        return {"configured": False, "ready": False, "allowed_entities": 0, "detail": "local credential vault unavailable"}
     allowed_entities = sorted(_allowed_entities())
     return {
         "configured": configured,
@@ -91,9 +102,13 @@ def status():
     }
 
 
-def _request(method, path, payload=None, timeout=10):
-    base_url = _base_url()
-    headers = {"Authorization": f"Bearer {os.environ['JARVIS_HA_TOKEN']}", "Accept": "application/json"}
+def _request(method, path, payload=None, timeout=10, base_url=None, token=None):
+    base_url = _base_url(base_url, token)
+    try:
+        token = token or get_secret("home_assistant_token") or os.environ.get("JARVIS_HA_TOKEN", "")
+    except SecretStoreError as error:
+        raise HomeAssistantError("The local credential vault is unavailable.") from error
+    headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
     data = None
     if payload is not None:
         headers["Content-Type"] = "application/json"
@@ -103,15 +118,50 @@ def _request(method, path, payload=None, timeout=10):
         with urlopen(http_request, timeout=timeout) as response:
             response_body = response.read()
     except HTTPError as error:
-        raise HomeAssistantError(f"Home Assistant returned HTTP {error.code}.") from error
+        hint = " The token was rejected; create a new long-lived token." if error.code in {401, 403} else ""
+        raise HomeAssistantError(f"Home Assistant returned HTTP {error.code}.{hint}") from error
     except (URLError, TimeoutError, OSError) as error:
-        raise HomeAssistantError("Home Assistant could not be reached or timed out.") from error
+        reason = getattr(error, "reason", error)
+        raise HomeAssistantError(
+            f"The Jarvis server could not reach {base_url} ({str(reason)[:150]}). Use an IP address the server can reach, not one only your PC can."
+        ) from error
     if not response_body:
         return None
     try:
         return json.loads(response_body.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
         raise HomeAssistantError("Home Assistant returned an invalid response.") from error
+
+
+def test_connection(base_url, token):
+    response = _request("GET", "/api/", timeout=8, base_url=base_url, token=token)
+    if not isinstance(response, dict) or response.get("message") != "API running.":
+        raise HomeAssistantError("Home Assistant did not return its expected API status.")
+    return True
+
+
+def discover_entities(base_url=None, token=None):
+    states = _request("GET", "/api/states", base_url=base_url, token=token)
+    if not isinstance(states, list):
+        raise HomeAssistantError("Home Assistant returned an invalid entity list.")
+    entities = []
+    for item in states:
+        if not isinstance(item, dict):
+            continue
+        entity_id = item.get("entity_id")
+        if not isinstance(entity_id, str) or "." not in entity_id:
+            continue
+        domain = entity_id.split(".", 1)[0]
+        if domain not in _ALLOWED_ACTIONS:
+            continue
+        attributes = item.get("attributes", {})
+        friendly_name = attributes.get("friendly_name") if isinstance(attributes, dict) else None
+        entities.append({
+            "entity_id": entity_id,
+            "friendly_name": str(friendly_name or entity_id)[:200],
+            "domain": domain,
+        })
+    return entities
 
 
 def list_allowed_entities():

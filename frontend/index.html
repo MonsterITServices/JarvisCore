@@ -183,6 +183,23 @@
     .rules-input { width: 100%; min-height: 210px; resize: vertical; padding: 13px; border: 1px solid var(--line); outline: none; background: #111816; color: var(--text); font: 12px/1.6 var(--mono); }
     .rules-input:focus { border-color: var(--cyan); }
     .rules-status { min-height: 20px; margin-top: 8px; color: var(--muted); font-size: 9px; }
+    .settings-dialog { max-height: calc(100dvh - 40px); overflow-y: auto; }
+    .settings-section { padding: 14px 0; border-top: 1px solid var(--line); }
+    .settings-section h3 { margin: 0 0 12px; color: var(--cyan); font-size: 10px; font-weight: 400; text-transform: uppercase; }
+    .settings-toggle { display: flex; align-items: center; gap: 8px; margin: 9px 0 14px; color: var(--text); font-size: 10px; }
+    .settings-toggle input { accent-color: var(--cyan); }
+    .settings-form { display: grid; gap: 7px; }
+    .settings-input { width: 100%; min-width: 0; min-height: 36px; padding: 8px; border: 1px solid var(--line); outline: none; background: #111816; color: var(--text); font: 10px var(--mono); }
+    .settings-input:focus { border-color: var(--cyan); }
+    .settings-actions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 5px; }
+    .settings-status { min-height: 18px; margin-top: 8px; color: var(--muted); font-size: 9px; line-height: 1.5; overflow-wrap: anywhere; }
+    .provider-grid { display: grid; gap: 4px; margin-top: 12px; }
+    .provider-status-row { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; border-bottom: 1px solid rgba(43, 57, 52, .6); color: var(--muted); font-size: 9px; }
+    .provider-status-row span:last-child { color: var(--amber); text-align: right; }
+    .provider-status-row .configured { color: var(--mint); }
+    .ha-entity-choices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 12px; max-height: 180px; overflow-y: auto; margin-top: 8px; }
+    .ha-entity-choice { display: flex; align-items: start; gap: 7px; min-width: 0; padding: 6px 0; color: var(--text); font-size: 9px; overflow-wrap: anywhere; }
+    .ha-entity-choice input { flex: 0 0 auto; margin: 1px 0 0; accent-color: var(--cyan); }
     .rules-actions { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 8px; }
     .rules-count { color: var(--muted); font-size: 9px; }
     .chat-panel { min-height: 690px; display: flex; flex-direction: column; }
@@ -271,7 +288,7 @@
     <main class="layout">
       <section class="intro">
         <div><div class="eyebrow">Personal command interface / 01</div><h1>Good to have you back.</h1></div>
-        <div class="intro-actions"><div class="intro-note">Listening is always initiated by you.</div><button class="quick-button" id="rules-button" type="button">Edit hard rules</button></div>
+        <div class="intro-actions"><div class="intro-note">Listening is always initiated by you.</div><button class="quick-button" id="settings-button" type="button">Settings</button><button class="quick-button" id="rules-button" type="button">Edit hard rules</button></div>
       </section>
 
       <div class="dashboard">
@@ -421,6 +438,59 @@
     <div class="rules-actions"><span class="rules-count" id="knowledge-note-count">0 / 100000</span><div class="action-dialog-actions"><button type="button" id="knowledge-note-cancel">Cancel</button><button type="button" id="knowledge-note-save">Save note</button></div></div>
     <div class="rules-status" id="knowledge-note-status" aria-live="polite"></div>
   </dialog>
+  <dialog class="rules-dialog settings-dialog" id="settings-dialog" aria-labelledby="settings-title">
+    <h2 id="settings-title">Connections and workspace</h2>
+    <p class="rules-description">Credentials are encrypted in this Windows user account and never sent back to the browser. Choose exactly what Jarvis may connect to.</p>
+    <section class="settings-section" aria-label="AI provider settings">
+      <h3>AI providers</h3>
+      <label class="settings-toggle"><input id="external-ai-enabled" type="checkbox"><span>Allow hosted AI providers</span></label>
+      <label class="rules-label" for="default-provider">Default provider</label>
+      <select class="settings-input" id="default-provider">
+        <option value="ollama">Ollama / local</option>
+        <option value="openai-compatible">OpenAI-compatible</option>
+        <option value="gemini">Gemini</option>
+        <option value="anthropic">Claude</option>
+        <option value="copilot">GitHub Copilot</option>
+      </select>
+      <form class="settings-form" id="ai-provider-form">
+        <label class="rules-label" for="ai-provider-config">Provider credentials</label>
+        <select class="settings-input" id="ai-provider-config">
+          <option value="openai-compatible">OpenAI-compatible</option>
+          <option value="gemini">Gemini</option>
+          <option value="anthropic">Claude</option>
+          <option value="copilot">GitHub Copilot</option>
+        </select>
+        <input class="settings-input" id="ai-model-name" type="text" maxlength="120" placeholder="Model name">
+        <input class="settings-input" id="ai-api-key" type="password" maxlength="10000" autocomplete="new-password" placeholder="Paste provider key; leave blank to keep saved">
+        <label class="settings-toggle"><input id="ai-clear-key" type="checkbox"><span>Remove saved key</span></label>
+        <div class="settings-actions"><button class="security-button" type="submit">Save provider</button><button class="security-button" id="ai-test-button" type="button">Test connection</button></div>
+      </form>
+      <div class="provider-grid" id="provider-settings-list"></div>
+      <div class="settings-status" id="ai-settings-status" aria-live="polite"></div>
+    </section>
+    <section class="settings-section" aria-label="Home Assistant settings">
+      <h3>Home Assistant</h3>
+      <form class="settings-form" id="home-assistant-settings-form">
+        <label class="rules-label" for="ha-url">Server URL</label>
+        <input class="settings-input" id="ha-url" type="url" maxlength="500" placeholder="http://homeassistant.local:8123">
+        <label class="rules-label" for="ha-token">Long-lived access token</label>
+        <input class="settings-input" id="ha-token" type="password" maxlength="10000" autocomplete="new-password" placeholder="Leave blank to keep the saved token">
+        <div class="settings-actions"><button class="security-button" id="ha-connect-button" type="submit">Test and connect</button><button class="security-button" id="ha-save-entities" type="button" disabled>Save allowed devices</button></div>
+      </form>
+      <div class="settings-status" id="ha-settings-status" aria-live="polite"></div>
+      <div class="ha-entity-choices" id="ha-entity-choices"></div>
+    </section>
+    <section class="settings-section" aria-label="Editable workspace settings">
+      <h3>Editable workspace</h3>
+      <form class="settings-form" id="workspace-settings-form">
+        <label class="rules-label" for="workspace-path">Absolute folder path</label>
+        <input class="settings-input" id="workspace-path" type="text" maxlength="1000" placeholder="C:\\Projects">
+        <div class="settings-actions"><button class="security-button" type="submit">Use this folder</button></div>
+      </form>
+      <div class="settings-status" id="workspace-settings-status" aria-live="polite"></div>
+    </section>
+    <div class="action-dialog-actions"><button type="button" id="settings-close">Close</button></div>
+  </dialog>
 
   <script>
     const conversation = document.getElementById('conversation');
@@ -467,6 +537,219 @@
     }
 
     providerSelect.addEventListener('change', updateProviderStatus);
+    const settingsDialog = document.getElementById('settings-dialog');
+    const providerConfigSelect = document.getElementById('ai-provider-config');
+    const providerSettingsList = document.getElementById('provider-settings-list');
+    let settingsState = null;
+
+    const providerLabels = {
+      'openai-compatible': 'OpenAI-compatible',
+      gemini: 'Gemini',
+      anthropic: 'Claude',
+      copilot: 'GitHub Copilot'
+    };
+
+    function updateAiProviderForm() {
+      const provider = providerConfigSelect.value;
+      const providerInfo = settingsState?.providers?.[provider];
+      const modelInput = document.getElementById('ai-model-name');
+      const keyInput = document.getElementById('ai-api-key');
+      modelInput.value = providerInfo?.model || '';
+      document.getElementById('ai-clear-key').checked = false;
+      keyInput.value = '';
+      keyInput.placeholder = provider === 'copilot'
+        ? 'GitHub token; leave blank to keep saved'
+        : 'Paste provider key; leave blank to keep saved';
+    }
+
+    function renderProviderSettings() {
+      providerSettingsList.replaceChildren();
+      Object.entries(providerLabels).forEach(([provider, label]) => {
+        const row = document.createElement('div');
+        row.className = 'provider-status-row';
+        const name = document.createElement('span');
+        name.textContent = label;
+        const state = document.createElement('span');
+        const providerInfo = settingsState?.providers?.[provider];
+        const configured = Boolean(providerInfo?.configured);
+        state.textContent = configured ? 'Credential saved' : 'Not configured';
+        if (configured) state.classList.add('configured');
+        row.append(name, state);
+        providerSettingsList.append(row);
+      });
+    }
+
+    function renderHomeAssistantEntities(entities, allowedEntities = []) {
+      const container = document.getElementById('ha-entity-choices');
+      container.replaceChildren();
+      const allowed = new Set(allowedEntities);
+      entities.forEach((entity) => {
+        const label = document.createElement('label');
+        label.className = 'ha-entity-choice';
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.value = entity.entity_id;
+        checkbox.checked = allowed.has(entity.entity_id);
+        const text = document.createElement('span');
+        text.textContent = `${entity.friendly_name} / ${entity.entity_id}`;
+        label.append(checkbox, text);
+        container.append(label);
+      });
+      document.getElementById('ha-save-entities').disabled = entities.length === 0;
+    }
+
+    async function refreshSettings() {
+      const response = await fetch('/api/settings');
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Settings could not be loaded.');
+      settingsState = data;
+      aiStatus = data.ai;
+      document.getElementById('external-ai-enabled').checked = data.external_ai_enabled;
+      document.getElementById('default-provider').value = data.default_provider;
+      document.getElementById('ha-url').value = data.home_assistant.url || '';
+      document.getElementById('workspace-path').value = data.workspace;
+      document.getElementById('workspace-settings-status').textContent = `Active folder: ${data.workspace}`;
+      renderProviderSettings();
+      updateAiProviderForm();
+      updateProviderStatus();
+      const haStatus = document.getElementById('ha-settings-status');
+      haStatus.textContent = data.home_assistant.ready
+        ? `Connected / ${data.home_assistant.allowed_entities} approved devices`
+        : data.home_assistant.configured
+          ? 'Connected, but no devices have been approved yet.'
+          : 'Not connected';
+      document.getElementById('home-assistant-status').textContent = data.home_assistant.ready
+        ? `${data.home_assistant.allowed_entities} allowed`
+        : 'Not connected';
+      document.getElementById('home-assistant-status').classList.toggle('unavailable', !data.home_assistant.ready);
+      if (data.home_assistant.allowed_entities.length) {
+        renderHomeAssistantEntities(
+          data.home_assistant.allowed_entities.map((entityId) => ({ entity_id: entityId, friendly_name: entityId })),
+          data.home_assistant.allowed_entities
+        );
+      }
+    }
+
+    document.getElementById('settings-button').addEventListener('click', async () => {
+      settingsDialog.showModal();
+      document.getElementById('ai-settings-status').textContent = 'Loading settings...';
+      try {
+        await refreshSettings();
+        document.getElementById('ai-settings-status').textContent = '';
+      } catch (error) {
+        document.getElementById('ai-settings-status').textContent = error.message;
+      }
+    });
+    document.getElementById('settings-close').addEventListener('click', () => settingsDialog.close());
+    providerConfigSelect.addEventListener('change', updateAiProviderForm);
+
+    document.getElementById('ai-provider-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const status = document.getElementById('ai-settings-status');
+      status.textContent = 'Saving provider settings...';
+      try {
+        const response = await fetch('/api/settings/ai', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            provider: providerConfigSelect.value,
+            model: document.getElementById('ai-model-name').value,
+            api_key: document.getElementById('ai-api-key').value,
+            clear_key: document.getElementById('ai-clear-key').checked,
+            external_ai_enabled: document.getElementById('external-ai-enabled').checked,
+            default_provider: document.getElementById('default-provider').value
+          })
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Provider settings could not be saved.');
+        document.getElementById('ai-api-key').value = '';
+        document.getElementById('ai-clear-key').checked = false;
+        await refreshSettings();
+        status.textContent = `${providerLabels[data.provider]} settings saved. ${data.configured ? 'Credential is ready.' : 'Add a credential to connect.'}`;
+      } catch (error) {
+        status.textContent = error.message;
+      }
+    });
+
+    document.getElementById('ai-test-button').addEventListener('click', async () => {
+      const status = document.getElementById('ai-settings-status');
+      status.textContent = 'Testing connection (save the key first)...';
+      try {
+        const response = await fetch('/api/settings/ai/test', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ provider: providerConfigSelect.value })
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || `Test failed (HTTP ${response.status}).`);
+        status.textContent = data.ok
+          ? `Connected: ${providerLabels[data.provider] || data.provider} / ${data.model} replied "${data.reply}".`
+          : `Not connected: ${data.error}`;
+      } catch (error) {
+        status.textContent = `Test failed: ${error.message}`;
+      }
+    });
+
+    async function saveHomeAssistantSettings() {
+      const status = document.getElementById('ha-settings-status');
+      const button = document.getElementById('ha-connect-button');
+      const selectedEntities = [...document.querySelectorAll('#ha-entity-choices input:checked')].map((input) => input.value);
+      status.textContent = 'Testing Home Assistant connection...';
+      button.disabled = true;
+      try {
+        const response = await fetch('/api/settings/home-assistant', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            url: document.getElementById('ha-url').value,
+            token: document.getElementById('ha-token').value,
+            allowed_entities: selectedEntities
+          })
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Home Assistant could not connect.');
+        document.getElementById('ha-token').value = '';
+        settingsState.home_assistant = { ...data.status, url: data.url, allowed_entities: data.allowed_entities };
+        renderHomeAssistantEntities(data.entities, data.allowed_entities);
+        status.textContent = `Connected / ${data.entities.length} supported devices found / ${data.allowed_entities.length} approved`;
+        document.getElementById('home-assistant-status').textContent = data.status.ready
+          ? `${data.status.allowed_entities} allowed`
+          : 'Connected; approve devices';
+        document.getElementById('home-assistant-status').classList.toggle('unavailable', !data.status.ready);
+        refreshHomeAssistantDevices().catch(() => {});
+      } catch (error) {
+        status.textContent = error.message;
+      } finally {
+        button.disabled = false;
+      }
+    }
+
+    document.getElementById('home-assistant-settings-form').addEventListener('submit', (event) => {
+      event.preventDefault();
+      saveHomeAssistantSettings();
+    });
+    document.getElementById('ha-save-entities').addEventListener('click', saveHomeAssistantSettings);
+
+    document.getElementById('workspace-settings-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const status = document.getElementById('workspace-settings-status');
+      status.textContent = 'Updating workspace...';
+      try {
+        const response = await fetch('/api/settings/workspace', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ workspace: document.getElementById('workspace-path').value })
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Workspace could not be updated.');
+        document.getElementById('workspace-path').value = data.workspace;
+        document.getElementById('code-workbench-location').textContent = `Workspace: ${data.workspace} / text files / execution disabled`;
+        status.textContent = `Active folder: ${data.workspace}`;
+      } catch (error) {
+        status.textContent = error.message;
+      }
+    });
+
     let currentCodeDraftId = null;
     const rulesDialog = document.getElementById('rules-dialog');
     const rulesInput = document.getElementById('hard-rules-input');
