@@ -935,8 +935,13 @@ def add_knowledge():
             data = uploaded_file.stream.read(MAX_UPLOAD_BYTES + 1)
             extracted = extract_document(uploaded_file.filename or "", data)
             source = f"file:{extracted['filename']}"
-            indexed = index_document(source, extracted["title"], extracted["text"], extracted["document_type"])
-            result = {**indexed, "title": extracted["title"], "source": source, "document_type": extracted["document_type"]}
+            title = extracted["title"]
+            relative_path = re.sub(r"[\x00-\x1f]", "", request.form.get("relative_path", "")).strip().replace("\\", "/")[:300]
+            if relative_path and not relative_path.startswith("/") and ".." not in relative_path.split("/"):
+                source = f"file:{relative_path}"
+                title = relative_path
+            indexed = index_document(source, title, extracted["text"], extracted["document_type"])
+            result = {**indexed, "title": title, "source": source, "document_type": extracted["document_type"]}
     except (DocumentIngestError, KnowledgeStoreError, WebAccessError) as error:
         return jsonify({"error": str(error)}), 400
     return jsonify(result), 201

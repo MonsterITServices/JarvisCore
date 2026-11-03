@@ -32,7 +32,7 @@ _OCR_MODEL_FILES = (
 _OCR_LOCK = Lock()
 _OCR_ENGINE = None
 SUPPORTED_EXTENSIONS = {
-    ".txt", ".md", ".markdown", ".html", ".htm", ".csv", ".pdf", ".docx", ".pptx", ".xlsx",
+    ".txt", ".md", ".markdown", ".lua", ".luau", ".html", ".htm", ".csv", ".pdf", ".docx", ".pptx", ".xlsx",
     ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tif", ".tiff", ".webp",
 }
 
@@ -239,7 +239,7 @@ def extract_document(filename, data):
     if len(data) > MAX_UPLOAD_BYTES:
         raise DocumentIngestError("Files are limited to 25 MB.")
 
-    if extension in {".txt", ".md", ".markdown"}:
+    if extension in {".txt", ".md", ".markdown", ".lua", ".luau"}:
         text = data.decode("utf-8-sig", errors="replace")
         title = ""
     elif extension in {".html", ".htm"}:
