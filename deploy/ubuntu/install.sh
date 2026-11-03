@@ -9,8 +9,8 @@ VENV_DIR="/opt/jarvis/venv"
 DATA_DIR="/var/lib/jarvis"
 ENV_FILE="/etc/jarvis.env"
 SERVICE_FILE="/etc/systemd/system/jarvis.service"
-NGINX_SITE="/etc/nginx/sites-available/jarvis"
-AUTH_FILE="/etc/nginx/.htpasswd"
+APACHE_SITE="/etc/apache2/sites-available/jarvis.conf"
+AUTH_FILE="/etc/apache2/.htpasswd-jarvis"
 
 log() {
   printf '\n[Jarvis] %s\n' "$1"
@@ -75,6 +75,16 @@ if [[ "${USE_OLLAMA}" == "1" && -z "${OLLAMA_MODEL}" ]]; then
 fi
 OLLAMA_MODEL="${OLLAMA_MODEL:-qwen3-coder:30b}"
 
+# Optional Cloudflare Tunnel hostname, e.g. jarvis.example.com (tunnel service: http://127.0.0.1:5000).
+PUBLIC_HOST="${JARVIS_PUBLIC_HOST-}"
+if [[ -z "${JARVIS_PUBLIC_HOST+x}" ]]; then
+  read -r -p "Cloudflare tunnel hostname, blank for none [jarvis.monsterit.co.uk]: " PUBLIC_HOST
+  PUBLIC_HOST="${PUBLIC_HOST:-jarvis.monsterit.co.uk}"
+fi
+if [[ -n "${PUBLIC_HOST}" && ! "${PUBLIC_HOST}" =~ ^[a-zA-Z0-9.-]{1,253}$ ]]; then
+  fail "The tunnel hostname may contain letters, numbers, dot, and hyphen only."
+fi
+
 AUTH_USER="${JARVIS_WEB_USER:-jarvis}"
 if [[ ! "${AUTH_USER}" =~ ^[a-zA-Z0-9._-]{1,64}$ ]]; then
   fail "The web username may contain letters, numbers, dot, underscore, and hyphen only."
@@ -98,7 +108,7 @@ PY
 log "Installing Ubuntu packages"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
-apt-get install -y ca-certificates curl build-essential python3 python3-venv python3-dev nginx apache2-utils
+apt-get install -y ca-certificates curl build-essential python3 python3-venv python3-dev apache2 apache2-utils
 
 if ! id "${APP_USER}" >/dev/null 2>&1; then
   useradd --system --create-home --home-dir "${DATA_DIR}" --shell /usr/sbin/nologin "${APP_USER}"
@@ -197,6 +207,10 @@ EOF
 else
   log "Keeping existing ${ENV_FILE}; update JARVIS_OLLAMA_MODEL there if needed."
 fi
+sed -i '/^JARVIS_PUBLIC_ORIGIN=/d' "${ENV_FILE}"
+if [[ -n "${PUBLIC_HOST}" ]]; then
+  echo "JARVIS_PUBLIC_ORIGIN=https://${PUBLIC_HOST}" >> "${ENV_FILE}"
+fi
 
 log "Installing the systemd service"
 cat > "${SERVICE_FILE}" <<EOF
@@ -229,7 +243,12 @@ EOF
 systemctl daemon-reload
 systemctl enable --now jarvis
 
-log "Creating Nginx LAN-only reverse proxy"
+log "Creating Apache LAN-only reverse proxy"
+if systemctl is-active --quiet nginx 2>/dev/null; then
+  log "Stopping nginx from an earlier install so Apache can use port 80"
+  systemctl disable --now nginx
+fi
+rm -f /etc/nginx/sites-enabled/jarvis
 if [[ -f "${AUTH_FILE}" ]]; then
   htpasswd -B "${AUTH_FILE}" "${AUTH_USER}"
 else
@@ -238,37 +257,37 @@ fi
 chown root:www-data "${AUTH_FILE}"
 chmod 0640 "${AUTH_FILE}"
 
-cat > "${NGINX_SITE}" <<EOF
-server {
-    listen 80;
-    server_name ${SERVER_IP};
+cat > "${APACHE_SITE}" <<EOF
+<VirtualHost *:80>
+    ServerName ${SERVER_IP}
+    ServerSignature Off
+    LimitRequestBody 27262976
+    ProxyPreserveHost On
+    ProxyTimeout 240
+    ProxyPass / http://127.0.0.1:5000/ timeout=240
+    ProxyPassReverse / http://127.0.0.1:5000/
+    RequestHeader set X-Forwarded-Proto "http"
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-Frame-Options "DENY"
+    Header always set Referrer-Policy "no-referrer"
 
-    allow ${LAN_CIDR};
-    deny all;
-
-    client_max_body_size 26m;
-    auth_basic "Jarvis LAN";
-    auth_basic_user_file ${AUTH_FILE};
-
-    add_header X-Content-Type-Options nosniff always;
-    add_header X-Frame-Options DENY always;
-    add_header Referrer-Policy no-referrer always;
-
-    location / {
-        proxy_pass http://127.0.0.1:5000;
-        proxy_http_version 1.1;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_read_timeout 240s;
-    }
-}
+    <Location />
+        AuthType Basic
+        AuthName "Jarvis LAN"
+        AuthUserFile ${AUTH_FILE}
+        <RequireAll>
+            Require ip ${LAN_CIDR}
+            Require valid-user
+        </RequireAll>
+    </Location>
+</VirtualHost>
 EOF
-ln -sfn "${NGINX_SITE}" /etc/nginx/sites-enabled/jarvis
-nginx -t
-systemctl enable --now nginx
-systemctl reload nginx
+a2enmod proxy proxy_http headers auth_basic authn_file authz_core authz_host >/dev/null
+a2dissite 000-default >/dev/null 2>&1 || true
+a2ensite jarvis >/dev/null
+apache2ctl configtest
+systemctl enable apache2
+systemctl restart apache2
 
 if command -v ufw >/dev/null 2>&1 && ufw status | grep -q "Status: active"; then
   ufw allow from "${LAN_CIDR}" to any port 80 proto tcp
@@ -291,6 +310,10 @@ printf 'Web login: %s (password entered into htpasswd above)\n' "${AUTH_USER}"
 if [[ "${USE_OLLAMA}" == "1" ]]; then printf 'Ollama model: %s\n' "${OLLAMA_MODEL}"; fi
 printf 'Code workspace: %s/Projects\n' "${DATA_DIR}"
 printf 'Next: open the URL, click Settings, add your AI key and Home Assistant token there.\n'
+if [[ -n "${PUBLIC_HOST}" ]]; then
+  printf 'Tunnel: point the Cloudflare public hostname %s at http://127.0.0.1:5000 (not port 80).\n' "${PUBLIC_HOST}"
+  printf 'SECURITY: that route has no password. Protect it with a Cloudflare Access policy, or anyone online can control Jarvis.\n'
+fi
 printf 'Logs: sudo journalctl -u jarvis -f\n'
 printf 'Update later: copy the new files over and re-run this script; your settings and keys are kept.\n'
 printf 'Do not port-forward this HTTP service to the public internet.\n'

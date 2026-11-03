@@ -644,6 +644,9 @@ def _local_settings_origin():
     if not origin:
         return True
     parsed = urlsplit(origin)
+    public_origin = os.environ.get("JARVIS_PUBLIC_ORIGIN", "").strip().rstrip("/").casefold()
+    if public_origin and origin.rstrip("/").casefold() == public_origin:
+        return True
     return (
         parsed.scheme in {"http", "https"}
         and not parsed.username

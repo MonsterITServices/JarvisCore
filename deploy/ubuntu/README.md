@@ -1,6 +1,6 @@
 # Deploy Jarvis on Ubuntu Server
 
-This keeps the Flask app private on loopback and exposes it through Nginx on port 80 with Basic Auth. Replace example values such as `192.168.1.50` and the LAN CIDR with your server's actual reserved IP and subnet.
+This keeps the Flask app private on loopback and exposes it through Apache on port 80 with Basic Auth. Replace example values such as `192.168.1.50` and the LAN CIDR with your server's actual reserved IP and subnet.
 
 ## Quick Install
 
@@ -12,11 +12,11 @@ ssh <linux-user>@<server-ip>
 sudo bash /tmp/JarvisCore/deploy/ubuntu/install.sh
 ```
 
-The installer asks for the server LAN IPv4, your trusted LAN CIDR, and Ollama model. It installs system dependencies, the Python venv, Ollama, the selected model, a single-worker Gunicorn systemd service, and an Nginx port-80 site restricted to that CIDR with Basic Auth. It prompts you to set the web login password. The 30B default model is a large download; choose a smaller Ollama model when RAM is limited. The app itself stays bound to `127.0.0.1:5000`.
+The installer asks for the server LAN IPv4, your trusted LAN CIDR, and Ollama model. It installs system dependencies, the Python venv, Ollama, the selected model, a single-worker Gunicorn systemd service, and an Apache port-80 site restricted to that CIDR with Basic Auth. It prompts you to set the web login password. The 30B default model is a large download; choose a smaller Ollama model when RAM is limited. The app itself stays bound to `127.0.0.1:5000`.
 
 Open `http://<server-ip>` from a device on that LAN and sign in. The code workbench uses `/var/lib/jarvis/Projects`, separate from the application. Review `/etc/jarvis.env` to configure optional Brave Search or Home Assistant values.
 
-The script has not been executed in this Windows workspace because Bash/WSL is unavailable here. Run it on the Ubuntu machine; read the script first if you need to adapt it for an existing Nginx/firewall setup.
+The script has not been executed in this Windows workspace because Bash/WSL is unavailable here. Run it on the Ubuntu machine; read the script first if you need to adapt it for an existing Apache/firewall setup.
 
 ## 1. Prepare the server
 
@@ -36,7 +36,7 @@ Install system packages and create a dedicated service user:
 
 ```bash
 sudo apt update
-sudo apt install -y python3 python3-venv nginx apache2-utils
+sudo apt install -y python3 python3-venv apache2 apache2-utils
 sudo adduser --system --group --home /var/lib/jarvis jarvis
 sudo install -d -o root -g jarvis -m 0750 /opt/jarvis/app
 sudo install -d -o jarvis -g jarvis -m 0750 /var/lib/jarvis/Projects
@@ -132,47 +132,44 @@ sudo systemctl status jarvis
 curl http://127.0.0.1:5000/api/health
 ```
 
-## 5. Put Nginx on port 80
+## 5. Put Apache on port 80
 
-Create `/etc/nginx/sites-available/jarvis` and replace the example IP:
+Create `/etc/apache2/sites-available/jarvis.conf` and replace the example IP and LAN subnet:
 
-```nginx
-server {
-    listen 80;
-    server_name 192.168.1.50;
+```apache
+<VirtualHost *:80>
+    ServerName 192.168.1.50
+    LimitRequestBody 27262976
+    ProxyPreserveHost On
+    ProxyTimeout 240
+    ProxyPass / http://127.0.0.1:5000/ timeout=240
+    ProxyPassReverse / http://127.0.0.1:5000/
+    RequestHeader set X-Forwarded-Proto "http"
 
-    client_max_body_size 26m;
-    auth_basic "Jarvis LAN";
-    auth_basic_user_file /etc/nginx/.htpasswd;
-
-    location / {
-        proxy_pass http://127.0.0.1:5000;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_read_timeout 240s;
-    }
-}
+    <Location />
+        AuthType Basic
+        AuthName "Jarvis LAN"
+        AuthUserFile /etc/apache2/.htpasswd-jarvis
+        <RequireAll>
+            Require ip 192.168.1.0/24
+            Require valid-user
+        </RequireAll>
+    </Location>
+</VirtualHost>
 ```
 
 Create a login and enable the site:
 
 ```bash
-sudo htpasswd -c /etc/nginx/.htpasswd jarvis
-sudo ln -s /etc/nginx/sites-available/jarvis /etc/nginx/sites-enabled/jarvis
-sudo nginx -t
-sudo systemctl reload nginx
+sudo htpasswd -cB /etc/apache2/.htpasswd-jarvis jarvis
+sudo a2enmod proxy proxy_http headers auth_basic authn_file authz_host
+sudo a2dissite 000-default
+sudo a2ensite jarvis
+sudo apache2ctl configtest
+sudo systemctl restart apache2
 ```
 
-If the default Nginx site conflicts on port 80, disable only that default site:
-
-```bash
-sudo rm /etc/nginx/sites-enabled/default
-sudo nginx -t
-sudo systemctl reload nginx
-```
+If Nginx is installed from an earlier setup, stop it so Apache can use port 80: `sudo systemctl disable --now nginx`.
 
 ## 6. Restrict the firewall to your LAN
 
@@ -193,7 +190,7 @@ Open `http://192.168.1.50` from a device on the allowed LAN and sign in. Text ch
 
 ```bash
 sudo journalctl -u jarvis -f
-sudo journalctl -u nginx -f
+sudo journalctl -u apache2 -f
 ```
 
 After changing application files or Python dependencies:
