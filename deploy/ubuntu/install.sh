@@ -43,6 +43,11 @@ if [[ ! -f "${SOURCE_DIR}/app.py" || ! -f "${SOURCE_DIR}/requirements.txt" ]]; t
   fail "Run this script from the copied Jarvis repository under deploy/ubuntu/."
 fi
 
+if ! command -v python3 >/dev/null 2>&1 || ! python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)'; then
+  fail "Python 3.10 or newer is required (Ubuntu 22.04 or newer)."
+fi
+PYTHON_IS_311="$(python3 -c 'import sys; print(1 if sys.version_info >= (3, 11) else 0)')"
+
 DEFAULT_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
 DEFAULT_IP="${DEFAULT_IP:-192.168.1.50}"
 SERVER_IP="${SERVER_IP:-}"
@@ -58,11 +63,17 @@ if [[ -z "${LAN_CIDR}" ]]; then
   LAN_CIDR="${LAN_CIDR:-${DEFAULT_LAN}}"
 fi
 
-OLLAMA_MODEL="${JARVIS_OLLAMA_MODEL:-}"
-if [[ -z "${OLLAMA_MODEL}" ]]; then
-  read -r -p "Ollama model [qwen3-coder:30b]: " OLLAMA_MODEL
-  OLLAMA_MODEL="${OLLAMA_MODEL:-qwen3-coder:30b}"
+# JARVIS_USE_OLLAMA=0 skips the large local model and uses hosted AI keys added in Settings.
+USE_OLLAMA="${JARVIS_USE_OLLAMA:-}"
+if [[ -z "${USE_OLLAMA}" ]]; then
+  read -r -p "Install the local Ollama model? Choose n to use Gemini/Claude keys only [Y/n]: " answer
+  case "${answer:-Y}" in [nN]*) USE_OLLAMA=0 ;; *) USE_OLLAMA=1 ;; esac
 fi
+OLLAMA_MODEL="${JARVIS_OLLAMA_MODEL:-}"
+if [[ "${USE_OLLAMA}" == "1" && -z "${OLLAMA_MODEL}" ]]; then
+  read -r -p "Ollama model [qwen3-coder:30b]: " OLLAMA_MODEL
+fi
+OLLAMA_MODEL="${OLLAMA_MODEL:-qwen3-coder:30b}"
 
 AUTH_USER="${JARVIS_WEB_USER:-jarvis}"
 if [[ ! "${AUTH_USER}" =~ ^[a-zA-Z0-9._-]{1,64}$ ]]; then
@@ -150,7 +161,12 @@ if [[ ! -x "${VENV_DIR}/bin/python" ]]; then
 fi
 runuser -u "${APP_USER}" -- "${VENV_DIR}/bin/pip" install --upgrade pip
 runuser -u "${APP_USER}" -- "${VENV_DIR}/bin/pip" install -r "${APP_DIR}/requirements.txt"
+if [[ "${PYTHON_IS_311}" == "1" ]]; then
+  runuser -u "${APP_USER}" -- "${VENV_DIR}/bin/pip" install github-copilot-sdk \
+    || log "Optional GitHub Copilot support could not be installed; Gemini and Claude still work."
+fi
 
+if [[ "${USE_OLLAMA}" == "1" ]]; then
 if ! command -v ollama >/dev/null 2>&1; then
   log "Installing Ollama from its official installer"
   curl --fail --show-error --location --proto '=https' --tlsv1.2 \
@@ -162,6 +178,9 @@ systemctl enable --now ollama
 
 log "Downloading the selected local language model: ${OLLAMA_MODEL}"
 ollama pull "${OLLAMA_MODEL}"
+else
+  log "Skipping Ollama; add a Gemini or Claude key in Jarvis Settings."
+fi
 
 if [[ ! -f "${ENV_FILE}" ]]; then
   install -o root -g "${APP_GROUP}" -m 0640 /dev/null "${ENV_FILE}"
@@ -256,13 +275,22 @@ if command -v ufw >/dev/null 2>&1 && ufw status | grep -q "Status: active"; then
 fi
 
 log "Checking the local Jarvis health endpoint"
-curl --fail --silent --show-error http://127.0.0.1:5000/api/health >/dev/null
+healthy=0
+for _ in $(seq 1 20); do
+  if curl --fail --silent http://127.0.0.1:5000/api/health >/dev/null; then healthy=1; break; fi
+  sleep 2
+done
+if [[ "${healthy}" != "1" ]]; then
+  journalctl -u jarvis -n 30 --no-pager || true
+  fail "Jarvis did not start. See the log above or run: sudo journalctl -u jarvis -f"
+fi
 
 printf '\nJarvis is installed.\n'
 printf 'LAN URL: http://%s\n' "${SERVER_IP}"
 printf 'Web login: %s (password entered into htpasswd above)\n' "${AUTH_USER}"
-printf 'Ollama model: %s\n' "${OLLAMA_MODEL}"
+if [[ "${USE_OLLAMA}" == "1" ]]; then printf 'Ollama model: %s\n' "${OLLAMA_MODEL}"; fi
 printf 'Code workspace: %s/Projects\n' "${DATA_DIR}"
+printf 'Next: open the URL, click Settings, add your AI key and Home Assistant token there.\n'
 printf 'Logs: sudo journalctl -u jarvis -f\n'
-printf 'Optional Brave/Home Assistant credentials: sudo nano %s\n' "${ENV_FILE}"
+printf 'Update later: copy the new files over and re-run this script; your settings and keys are kept.\n'
 printf 'Do not port-forward this HTTP service to the public internet.\n'
