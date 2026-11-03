@@ -75,7 +75,7 @@ if [[ "${USE_OLLAMA}" == "1" && -z "${OLLAMA_MODEL}" ]]; then
 fi
 OLLAMA_MODEL="${OLLAMA_MODEL:-qwen3-coder:30b}"
 
-# Optional Cloudflare Tunnel hostname, e.g. jarvis.example.com (tunnel service: http://127.0.0.1:5000).
+# Existing Cloudflare tunnel hostname (cloudflared itself is never installed or changed here).
 PUBLIC_HOST="${JARVIS_PUBLIC_HOST-}"
 if [[ -z "${JARVIS_PUBLIC_HOST+x}" ]]; then
   read -r -p "Cloudflare tunnel hostname, blank for none [jarvis.monsterit.co.uk]: " PUBLIC_HOST
@@ -282,6 +282,29 @@ cat > "${APACHE_SITE}" <<EOF
     </Location>
 </VirtualHost>
 EOF
+if [[ -n "${PUBLIC_HOST}" ]]; then
+  # Existing Cloudflare tunnel: only same-machine connections (cloudflared) may use this no-password host.
+  cat >> "${APACHE_SITE}" <<EOF
+
+<VirtualHost *:80>
+    ServerName ${PUBLIC_HOST}
+    ServerSignature Off
+    LimitRequestBody 27262976
+    ProxyPreserveHost On
+    ProxyTimeout 240
+    ProxyPass / http://127.0.0.1:5000/ timeout=240
+    ProxyPassReverse / http://127.0.0.1:5000/
+    RequestHeader set X-Forwarded-Proto "https"
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-Frame-Options "DENY"
+    Header always set Referrer-Policy "no-referrer"
+
+    <Location />
+        Require local
+    </Location>
+</VirtualHost>
+EOF
+fi
 a2enmod proxy proxy_http headers auth_basic authn_file authz_core authz_host >/dev/null
 a2dissite 000-default >/dev/null 2>&1 || true
 a2ensite jarvis >/dev/null
@@ -311,7 +334,8 @@ if [[ "${USE_OLLAMA}" == "1" ]]; then printf 'Ollama model: %s\n' "${OLLAMA_MODE
 printf 'Code workspace: %s/Projects\n' "${DATA_DIR}"
 printf 'Next: open the URL, click Settings, add your AI key and Home Assistant token there.\n'
 if [[ -n "${PUBLIC_HOST}" ]]; then
-  printf 'Tunnel: point the Cloudflare public hostname %s at http://127.0.0.1:5000 (not port 80).\n' "${PUBLIC_HOST}"
+  printf 'Tunnel: your existing Cloudflare tunnel needs no changes. %s is served without a password to same-machine tunnel traffic.\n' "${PUBLIC_HOST}"
+  printf 'The tunnel service can stay on http://localhost:80 (or point it at http://127.0.0.1:5000); cloudflared is not installed or modified here.\n'
   printf 'SECURITY: that route has no password. Protect it with a Cloudflare Access policy, or anyone online can control Jarvis.\n'
 fi
 printf 'Logs: sudo journalctl -u jarvis -f\n'
