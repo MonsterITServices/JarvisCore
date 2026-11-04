@@ -4,7 +4,7 @@ import re
 import tempfile
 from datetime import datetime
 from pathlib import Path
-from threading import Lock
+from threading import Event, Lock, Thread
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
@@ -46,7 +46,7 @@ from integrations.knowledge_store import (
 from integrations.model_providers import ProviderError, complete as complete_external_model, status as external_model_status
 from integrations.secret_store import SecretStoreError, get_secret, get_setting, set_secret, set_setting
 from integrations.security_audit import SecurityAuditError, audit_local_dependencies, run_jarvis_self_audit
-from integrations.web_access import WebAccessError, read_page as read_web_page
+from integrations.web_access import WebAccessError, crawl_site, read_page as read_web_page
 
 
 app = Flask(__name__, static_folder="frontend")
@@ -948,6 +948,72 @@ def add_knowledge():
     except (DocumentIngestError, KnowledgeStoreError, WebAccessError) as error:
         return jsonify({"error": str(error)}), 400
     return jsonify(result), 201
+
+
+_SITE_JOB_LOCK = Lock()
+_SITE_JOB = {"state": "idle"}
+_SITE_STOP = Event()
+_MAX_SITE_PAGES = 300
+
+
+def _run_site_crawl(start_url, max_pages):
+    def on_page(page):
+        try:
+            result = index_document(page["url"], page["title"], page["description"], "webpage")
+        except KnowledgeStoreError:
+            with _SITE_JOB_LOCK:
+                _SITE_JOB["failed"] += 1
+            return
+        with _SITE_JOB_LOCK:
+            _SITE_JOB["duplicate" if result.get("duplicate") else "saved"] += 1
+            _SITE_JOB["last"] = page["url"]
+
+    try:
+        summary = crawl_site(start_url, max_pages, on_page, _SITE_STOP.is_set)
+        with _SITE_JOB_LOCK:
+            _SITE_JOB["failed"] += summary["failures"]
+            _SITE_JOB["state"] = "cancelled" if _SITE_STOP.is_set() else "done"
+    except WebAccessError as error:
+        with _SITE_JOB_LOCK:
+            _SITE_JOB.update(state="error", error=str(error))
+
+
+@app.get("/api/knowledge/site")
+def site_crawl_status():
+    with _SITE_JOB_LOCK:
+        return jsonify(dict(_SITE_JOB))
+
+
+@app.post("/api/knowledge/site")
+def start_site_crawl():
+    if not _local_settings_origin():
+        return jsonify({"error": "Sites can only be added from this local Jarvis page."}), 403
+    if not _external_access_allowed():
+        return jsonify({"error": "External access is disabled by config/rules.json."}), 403
+    payload = request.get_json(silent=True)
+    url = payload.get("url") if isinstance(payload, dict) else None
+    if not isinstance(url, str) or len(url) > 2048 or not url.startswith("https://"):
+        return jsonify({"error": "Provide an HTTPS URL for the site or section to read."}), 400
+    try:
+        max_pages = max(1, min(int(payload.get("max_pages", 50)), _MAX_SITE_PAGES))
+    except (TypeError, ValueError):
+        max_pages = 50
+    with _SITE_JOB_LOCK:
+        if _SITE_JOB["state"] == "running":
+            return jsonify({"error": "A site is already being read. Wait for it or cancel it."}), 409
+        _SITE_STOP.clear()
+        _SITE_JOB.clear()
+        _SITE_JOB.update(state="running", url=url, max_pages=max_pages, saved=0, duplicate=0, failed=0, last="")
+    Thread(target=_run_site_crawl, args=(url, max_pages), daemon=True).start()
+    return jsonify({"started": True, "max_pages": max_pages}), 202
+
+
+@app.post("/api/knowledge/site/cancel")
+def cancel_site_crawl():
+    if not _local_settings_origin():
+        return jsonify({"error": "Cancel is only available from this local Jarvis page."}), 403
+    _SITE_STOP.set()
+    return jsonify({"cancelling": True})
 
 
 @app.post("/api/knowledge/note")

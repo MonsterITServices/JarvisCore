@@ -334,6 +334,7 @@
               <form class="knowledge-form" id="knowledge-url-form">
                 <input class="knowledge-url" id="knowledge-url" type="url" placeholder="HTTPS page URL" aria-label="Webpage URL to remember">
                 <button class="knowledge-add" type="submit">Remember page</button>
+                <button class="knowledge-add" id="knowledge-site-button" type="button" title="Read this page and the pages linked beneath it on the same site">Crawl site</button>
               </form>
               <div class="knowledge-note" id="knowledge-note" aria-live="polite">Extracted text is stored locally; uploaded originals are not kept.</div>
               <div class="knowledge-list" id="knowledge-list"></div>
@@ -1090,6 +1091,57 @@
     }
 
     document.getElementById('knowledge-file-button').addEventListener('click', () => document.getElementById('knowledge-file').click());
+    let siteCrawlTimer = null;
+    async function pollSiteCrawl() {
+      try {
+        const response = await fetch('/api/knowledge/site');
+        const job = await response.json();
+        const counts = `${job.saved || 0} saved, ${job.duplicate || 0} already saved, ${job.failed || 0} skipped`;
+        if (job.state === 'running') {
+          knowledgeNote.textContent = `Reading site (${counts}) / ${job.last || job.url}`;
+          siteCrawlTimer = setTimeout(pollSiteCrawl, 2000);
+          return;
+        }
+        siteCrawlTimer = null;
+        document.getElementById('knowledge-site-button').textContent = 'Crawl site';
+        knowledgeNote.textContent = job.state === 'error' ? job.error
+          : `Site read ${job.state === 'cancelled' ? 'cancelled' : 'complete'}: ${counts}.`;
+        await refreshKnowledgeLibrary();
+      } catch (error) {
+        knowledgeNote.textContent = error.message;
+        siteCrawlTimer = null;
+      }
+    }
+    document.getElementById('knowledge-site-button').addEventListener('click', async (event) => {
+      const button = event.currentTarget;
+      if (siteCrawlTimer) {
+        await fetch('/api/knowledge/site/cancel', { method: 'POST' });
+        knowledgeNote.textContent = 'Cancelling after the current page...';
+        return;
+      }
+      const url = document.getElementById('knowledge-url').value.trim();
+      if (!url) {
+        knowledgeNote.textContent = 'Enter the HTTPS address of the site or docs section first.';
+        return;
+      }
+      const limit = window.prompt('Read up to how many pages? Only this page and pages beneath its path on the same site are read (max 300).', '50');
+      if (limit === null) return;
+      try {
+        const response = await fetch('/api/knowledge/site', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url, max_pages: Number(limit) || 50 })
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Could not start reading that site.');
+        button.textContent = 'Cancel crawl';
+        document.getElementById('knowledge-url').value = '';
+        knowledgeNote.textContent = 'Reading site...';
+        siteCrawlTimer = setTimeout(pollSiteCrawl, 1000);
+      } catch (error) {
+        knowledgeNote.textContent = error.message;
+      }
+    });
     document.getElementById('knowledge-folder-button').addEventListener('click', () => document.getElementById('knowledge-folder').click());
     document.getElementById('knowledge-folder').addEventListener('change', async (event) => {
       const allowed = ['.md', '.markdown', '.txt', '.lua', '.luau', '.html', '.htm'];
