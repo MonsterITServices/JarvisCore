@@ -1,6 +1,6 @@
-# Deploy Jarvis on Ubuntu Server
+# Deploy Computer on Ubuntu Server
 
-This keeps the Flask app private on loopback and exposes it through Apache on port 80 with Basic Auth. Replace example values such as `192.168.1.50` and the LAN CIDR with your server's actual reserved IP and subnet.
+This keeps the Flask app private on loopback and uses Apache on port 8080. Replace example values such as `192.168.1.50` and the LAN CIDR with your server's actual reserved IP and subnet.
 
 ## Quick Install
 
@@ -12,9 +12,9 @@ ssh <linux-user>@<server-ip>
 sudo bash /tmp/JarvisCore/deploy/ubuntu/install.sh
 ```
 
-The installer asks for the server LAN IPv4, your trusted LAN CIDR, and Ollama model. It installs system dependencies, the Python venv, Ollama, the selected model, a single-worker Gunicorn systemd service, and an Apache port-80 site restricted to that CIDR with Basic Auth. It prompts you to set the web login password. The 30B default model is a large download; choose a smaller Ollama model when RAM is limited. The app itself stays bound to `127.0.0.1:5000`.
+The installer asks for the server LAN IPv4, trusted LAN CIDR, tunnel hostname, optional Ollama model, and the first Computer username and password. It retains existing accounts on subsequent runs. The 30B default model is a large download; choose a smaller model when RAM is limited. The app itself stays bound to `127.0.0.1:5000`.
 
-Open `http://<server-ip>` from a device on that LAN and sign in. The code workbench uses `/var/lib/jarvis/Projects`, separate from the application. Review `/etc/jarvis.env` to configure optional Brave Search or Home Assistant values.
+Open your HTTPS tunnel address to sign in. The existing Cloudflare tunnel is not modified; its route must already point to the Computer backend or Apache on port 8080. Add and remove users in Computer Settings; all users have full access, including user management. The last user cannot be removed. Accounts and active sessions are stored in `/var/lib/jarvis/.local/share/jarviscore/auth.sqlite3`; back this file up securely. Sign-in over remote plain HTTP is disabled. Local loopback HTTP is allowed for development.
 
 The script has not been executed in this Windows workspace because Bash/WSL is unavailable here. Run it on the Ubuntu machine; read the script first if you need to adapt it for an existing Apache/firewall setup.
 
@@ -48,7 +48,7 @@ sudo chmod 2770 /opt/jarvis/app/config
 sudo chown jarvis:jarvis /opt/jarvis/app/config/rules.json
 ```
 
-Set `code_workbench.workspace_root` in `/opt/jarvis/app/config/rules.json` to `/var/lib/jarvis/Projects`. This keeps generated projects outside the Jarvis application tree.
+Set `code_workbench.workspace_root` in `/opt/jarvis/app/config/rules.json` to `/var/lib/jarvis/Projects`. This keeps generated projects outside the Computer application tree.
 
 ## 2. Install Python dependencies
 
@@ -87,9 +87,15 @@ JARVIS_OLLAMA_MODEL=qwen3-coder:30b
 BRAVE_SEARCH_API_KEY=
 JARVIS_HA_URL=
 JARVIS_HA_TOKEN=
+JARVIS_PUBLIC_ORIGIN=https://jarvis.monsterit.co.uk
 ```
 
-Leave optional keys blank until configured. The app binds Flask to `127.0.0.1:5000`; do not change it to `0.0.0.0`.
+Leave optional keys blank until configured. Set the public origin to your HTTPS tunnel hostname. The app binds Flask to `127.0.0.1:5000`; do not change it to `0.0.0.0`. For a manual installation, create the first user before starting the service:
+
+```bash
+cd /opt/jarvis/app
+sudo -u jarvis env HOME=/var/lib/jarvis /opt/jarvis/venv/bin/python -m integrations.auth --bootstrap
+```
 
 ## 4. Run Gunicorn under systemd
 
@@ -97,7 +103,7 @@ Create `/etc/systemd/system/jarvis.service`:
 
 ```ini
 [Unit]
-Description=Jarvis local AI assistant
+Description=Computer local AI assistant
 After=network-online.target ollama.service
 Wants=network-online.target
 
@@ -129,15 +135,16 @@ One Gunicorn worker is intentional: staged code diffs are held in process memory
 sudo systemctl daemon-reload
 sudo systemctl enable --now jarvis
 sudo systemctl status jarvis
-curl http://127.0.0.1:5000/api/health
+curl http://127.0.0.1:5000/login
 ```
 
-## 5. Put Apache on port 80
+## 5. Put Apache on port 8080
 
 Create `/etc/apache2/sites-available/jarvis.conf` and replace the example IP and LAN subnet:
 
 ```apache
-<VirtualHost *:80>
+Listen 8080
+<VirtualHost *:8080>
     ServerName 192.168.1.50
     LimitRequestBody 27262976
     ProxyPreserveHost On
@@ -147,29 +154,22 @@ Create `/etc/apache2/sites-available/jarvis.conf` and replace the example IP and
     RequestHeader set X-Forwarded-Proto "http"
 
     <Location />
-        AuthType Basic
-        AuthName "Jarvis LAN"
-        AuthUserFile /etc/apache2/.htpasswd-jarvis
-        <RequireAll>
-            Require ip 192.168.1.0/24
-            Require valid-user
-        </RequireAll>
+        Require ip 192.168.1.0/24
     </Location>
 </VirtualHost>
 ```
 
-Create a login and enable the site:
+Enable the site:
 
 ```bash
-sudo htpasswd -cB /etc/apache2/.htpasswd-jarvis jarvis
-sudo a2enmod proxy proxy_http headers auth_basic authn_file authz_host
+sudo a2enmod proxy proxy_http headers authz_host
 sudo a2dissite 000-default
 sudo a2ensite jarvis
 sudo apache2ctl configtest
 sudo systemctl restart apache2
 ```
 
-If Nginx is installed from an earlier setup, stop it so Apache can use port 80: `sudo systemctl disable --now nginx`.
+For a tunnel routed through Apache, also configure the public hostname virtual host as shown in the installer, with `Require local` when cloudflared runs on the same host. Preserve existing Apache sites and tunnel routes.
 
 ## 6. Restrict the firewall to your LAN
 
@@ -177,14 +177,12 @@ Use the actual trusted subnet, not necessarily this example:
 
 ```bash
 sudo ufw allow OpenSSH
-sudo ufw allow from 192.168.1.0/24 to any port 80 proto tcp
+sudo ufw allow from 192.168.1.0/24 to any port 8080 proto tcp
 sudo ufw enable
 sudo ufw status
 ```
 
-Set the same LAN subnet in `security_policy.trusted_networks` in `config/rules.json`. Do not port-forward port 80 from your router to the internet. Basic Auth over plain HTTP is only appropriate on a trusted network; credentials are not encrypted in transit. For untrusted Wi-Fi or remote use, configure HTTPS/VPN before using it.
-
-Open `http://192.168.1.50` from a device on the allowed LAN and sign in. Text chat and the code workbench will work. Browser microphone access generally requires a secure context; voice may require internal HTTPS even though the app is reachable on port 80.
+Set the same LAN subnet in `security_policy.trusted_networks` in `config/rules.json`. Do not port-forward port 8080 to the internet. Use the HTTPS tunnel for sign-in and microphone access. Cloudflare Access provides an additional recommended protection layer.
 
 ## 7. Check logs and update
 

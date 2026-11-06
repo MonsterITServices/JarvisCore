@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Removes Jarvis. Keeps Apache, Ollama, system packages and your Cloudflare tunnel.
+# Removes Computer. Keeps Apache, Ollama, system packages and your Cloudflare tunnel.
 # Usage: sudo bash uninstall.sh [--purge-data] [--yes]
 set -Eeuo pipefail
 
@@ -21,15 +21,15 @@ for arg in "$@"; do
   esac
 done
 
-log() { printf '\n[Jarvis] %s\n' "$1"; }
+log() { printf '\n[Computer] %s\n' "$1"; }
 
 if [[ "${EUID}" -ne 0 ]]; then
-  printf '[Jarvis] ERROR: Run with sudo: sudo bash uninstall.sh\n' >&2
+  printf '[Computer] ERROR: Run with sudo: sudo bash uninstall.sh\n' >&2
   exit 1
 fi
 
 if [[ "${ASSUME_YES}" -ne 1 ]]; then
-  read -r -p "Remove Jarvis (service, Apache site, app, login)? [y/N]: " answer
+  read -r -p "Remove Computer (service, Apache site, app, login)? [y/N]: " answer
   [[ "${answer}" =~ ^[yY] ]] || { echo "Cancelled."; exit 0; }
   if [[ -d "${DATA_DIR}" && "${PURGE_DATA}" -ne 1 ]]; then
     read -r -p "Also DELETE saved keys, knowledge and the Projects workspace in ${DATA_DIR}? [y/N]: " answer
@@ -49,7 +49,7 @@ PY
 )"
 fi
 
-log "Stopping the Jarvis service"
+log "Stopping the Computer service"
 systemctl disable --now jarvis 2>/dev/null || true
 rm -f "${SERVICE_FILE}"
 systemctl daemon-reload

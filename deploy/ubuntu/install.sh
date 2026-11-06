@@ -15,14 +15,13 @@ DATA_DIR="/var/lib/jarvis"
 ENV_FILE="/etc/jarvis.env"
 SERVICE_FILE="/etc/systemd/system/jarvis.service"
 APACHE_SITE="/etc/apache2/sites-available/jarvis.conf"
-AUTH_FILE="/etc/apache2/.htpasswd-jarvis"
 
 log() {
-  printf '\n[Jarvis] %s\n' "$1"
+  printf '\n[Computer] %s\n' "$1"
 }
 
 fail() {
-  printf '\n[Jarvis] ERROR: %s\n' "$1" >&2
+  printf '\n[Computer] ERROR: %s\n' "$1" >&2
   exit 1
 }
 
@@ -46,7 +45,7 @@ fi
 
 SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 if [[ ! -f "${SOURCE_DIR}/app.py" || ! -f "${SOURCE_DIR}/requirements.txt" ]]; then
-  fail "Run this script from the copied Jarvis repository under deploy/ubuntu/."
+  fail "Run this script from the copied Computer repository under deploy/ubuntu/."
 fi
 
 if ! command -v python3 >/dev/null 2>&1 || ! python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)'; then
@@ -89,11 +88,6 @@ if [[ -n "${PUBLIC_HOST}" && ! "${PUBLIC_HOST}" =~ ^[a-zA-Z0-9.-]{1,253}$ ]]; th
   fail "The tunnel hostname may contain letters, numbers, dot, and hyphen only."
 fi
 
-AUTH_USER="${JARVIS_WEB_USER:-jarvis}"
-if [[ ! "${AUTH_USER}" =~ ^[a-zA-Z0-9._-]{1,64}$ ]]; then
-  fail "The web username may contain letters, numbers, dot, underscore, and hyphen only."
-fi
-
 python3 - "${SERVER_IP}" "${LAN_CIDR}" <<'PY'
 import ipaddress
 import sys
@@ -123,7 +117,7 @@ install -d -o root -g "${APP_GROUP}" -m 2770 "${APP_DIR}/config"
 install -d -o root -g "${APP_GROUP}" -m 0750 "${APP_DIR}"
 install -d -o "${APP_USER}" -g "${APP_GROUP}" -m 0750 "${VENV_DIR}"
 
-log "Copying Jarvis application files"
+log "Copying Computer application files"
 if ! command -v rsync >/dev/null 2>&1; then
   apt-get install -y rsync
 fi
@@ -155,6 +149,8 @@ with open(rules_path, encoding="utf-8") as source:
     rules = json.load(source)
 rules.setdefault("security_policy", {})["trusted_networks"] = [lan_cidr]
 rules.setdefault("code_workbench", {})["workspace_root"] = workspace
+rules.setdefault("voice_activation", {})["keyword"] = "computer"
+rules.setdefault("assistant_profile", {})["name"] = "Computer"
 fd, temporary_path = tempfile.mkstemp(prefix="rules-", suffix=".tmp", dir=os.path.dirname(rules_path))
 try:
     with os.fdopen(fd, "w", encoding="utf-8") as target:
@@ -180,6 +176,11 @@ if [[ "${PYTHON_IS_311}" == "1" ]]; then
     || log "Optional GitHub Copilot support could not be installed; Gemini and Claude still work."
 fi
 
+log "Setting up the first Computer user"
+pushd "${APP_DIR}" >/dev/null
+runuser -u "${APP_USER}" -- env HOME="${DATA_DIR}" "${VENV_DIR}/bin/python" -m integrations.auth --bootstrap
+popd >/dev/null
+
 if [[ "${USE_OLLAMA}" == "1" ]]; then
 if ! command -v ollama >/dev/null 2>&1; then
   log "Installing Ollama from its official installer"
@@ -193,7 +194,7 @@ systemctl enable --now ollama
 log "Downloading the selected local language model: ${OLLAMA_MODEL}"
 ollama pull "${OLLAMA_MODEL}"
 else
-  log "Skipping Ollama; add a Gemini or Claude key in Jarvis Settings."
+  log "Skipping Ollama; add a Gemini or Claude key in Computer Settings."
 fi
 
 if [[ ! -f "${ENV_FILE}" ]]; then
@@ -219,7 +220,7 @@ fi
 log "Installing the systemd service"
 cat > "${SERVICE_FILE}" <<EOF
 [Unit]
-Description=Jarvis local AI assistant
+Description=Computer local AI assistant
 After=network-online.target ollama.service
 Wants=network-online.target
 
@@ -245,20 +246,10 @@ ReadWritePaths=${APP_DIR}/config ${DATA_DIR}
 WantedBy=multi-user.target
 EOF
 systemctl daemon-reload
-systemctl enable --now jarvis
+systemctl enable jarvis
+systemctl restart jarvis
 
 log "Creating Apache LAN-only reverse proxy on port ${WEB_PORT}"
-# Nginx disable block removed to protect existing port 80 configurations
-rm -f /etc/nginx/sites-enabled/jarvis
-
-if [[ -f "${AUTH_FILE}" ]]; then
-  htpasswd -B "${AUTH_FILE}" "${AUTH_USER}"
-else
-  htpasswd -cB "${AUTH_FILE}" "${AUTH_USER}"
-fi
-chown root:www-data "${AUTH_FILE}"
-chmod 0640 "${AUTH_FILE}"
-
 cat > "${APACHE_SITE}" <<EOF
 Listen ${WEB_PORT}
 
@@ -276,13 +267,7 @@ Listen ${WEB_PORT}
     Header always set Referrer-Policy "no-referrer"
 
     <Location />
-        AuthType Basic
-        AuthName "Jarvis LAN"
-        AuthUserFile ${AUTH_FILE}
-        <RequireAll>
-            Require ip ${LAN_CIDR}
-            Require valid-user
-        </RequireAll>
+      Require ip ${LAN_CIDR}
     </Location>
 </VirtualHost>
 EOF
@@ -310,7 +295,7 @@ if [[ -n "${PUBLIC_HOST}" ]]; then
 EOF
 fi
 
-a2enmod proxy proxy_http headers auth_basic authn_file authz_core authz_host >/dev/null
+a2enmod proxy proxy_http headers authz_core authz_host >/dev/null
 a2dissite 000-default >/dev/null 2>&1 || true
 a2ensite jarvis >/dev/null
 apache2ctl configtest
@@ -321,27 +306,25 @@ if command -v ufw >/dev/null 2>&1 && ufw status | grep -q "Status: active"; then
   ufw allow from "${LAN_CIDR}" to any port "${WEB_PORT}" proto tcp
 fi
 
-log "Checking the local Jarvis health endpoint"
+log "Checking the local Computer login page"
 healthy=0
 for _ in $(seq 1 20); do
-  if curl --fail --silent http://127.0.0.1:5000/api/health >/dev/null; then healthy=1; break; fi
+  if curl --fail --silent http://127.0.0.1:5000/login >/dev/null; then healthy=1; break; fi
   sleep 2
 done
 if [[ "${healthy}" != "1" ]]; then
   journalctl -u jarvis -n 30 --no-pager || true
-  fail "Jarvis did not start. See the log above or run: sudo journalctl -u jarvis -f"
+  fail "Computer did not start. See the log above or run: sudo journalctl -u jarvis -f"
 fi
 
 printf '\nJarvis is installed.\n'
-printf 'LAN URL: http://%s:%s\n' "${SERVER_IP}" "${WEB_PORT}"
-printf 'Web login: %s (password entered into htpasswd above)\n' "${AUTH_USER}"
+printf 'LAN URL: http://%s:%s (sign-in requires HTTPS)\n' "${SERVER_IP}" "${WEB_PORT}"
 if [[ "${USE_OLLAMA}" == "1" ]]; then printf 'Ollama model: %s\n' "${OLLAMA_MODEL}"; fi
 printf 'Code workspace: %s/Projects\n' "${DATA_DIR}"
 printf 'Next: open the URL, click Settings, add your AI key and Home Assistant token there.\n'
 if [[ -n "${PUBLIC_HOST}" ]]; then
-  printf 'Tunnel: your existing Cloudflare tunnel needs no changes. %s is served without a password to same-machine tunnel traffic.\n' "${PUBLIC_HOST}"
-  printf 'For best performance, point your Cloudflare tunnel directly to http://127.0.0.1:5000 instead of Apache.\n'
-  printf 'SECURITY: Protect your Cloudflare route with a Zero Trust Access policy, or anyone online can control Jarvis.\n'
+  printf 'Sign in at https://%s; your existing Cloudflare tunnel is not changed.\n' "${PUBLIC_HOST}"
+  printf 'A Cloudflare Zero Trust Access policy is recommended as an extra security layer.\n'
 fi
 printf 'Logs: sudo journalctl -u jarvis -f\n'
 printf 'Update later: copy the new files over and re-run this script; your settings and keys are kept.\n'

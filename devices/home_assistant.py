@@ -123,7 +123,7 @@ def _request(method, path, payload=None, timeout=10, base_url=None, token=None):
     except (URLError, TimeoutError, OSError) as error:
         reason = getattr(error, "reason", error)
         raise HomeAssistantError(
-            f"The Jarvis server could not reach {base_url} ({str(reason)[:150]}). Use an IP address the server can reach, not one only your PC can."
+            f"The Computer server could not reach {base_url} ({str(reason)[:150]}). Use an IP address the server can reach, not one only your PC can."
         ) from error
     if not response_body:
         return None

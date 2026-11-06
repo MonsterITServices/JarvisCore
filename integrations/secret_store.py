@@ -39,7 +39,7 @@ def _write_private(path, data):
         if os.name != "nt":
             path.chmod(0o600)
     except OSError as error:
-        raise SecretStoreError("Jarvis could not securely save local credentials.") from error
+        raise SecretStoreError("Computer could not securely save local credentials.") from error
     finally:
         if temporary_path and temporary_path.exists():
             temporary_path.unlink()
@@ -54,7 +54,7 @@ def _cipher():
             _write_private(key_path, Fernet.generate_key())
         return Fernet(key_path.read_bytes())
     except (OSError, ValueError) as error:
-        raise SecretStoreError("Jarvis could not open its local credential vault.") from error
+        raise SecretStoreError("Computer could not open its local credential vault.") from error
 
 
 def _load():
@@ -76,7 +76,7 @@ def _save(contents):
     try:
         encrypted = _cipher().encrypt(payload)
     except (OSError, ValueError) as error:
-        raise SecretStoreError("Jarvis could not encrypt local credentials.") from error
+        raise SecretStoreError("Computer could not encrypt local credentials.") from error
     _write_private(_store_directory() / "vault.enc", encrypted)
 
 

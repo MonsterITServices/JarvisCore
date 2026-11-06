@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#101615">
-  <title>Jarvis | Personal Systems</title>
+  <title>Computer | Personal Systems</title>
   <style>
     :root {
       color-scheme: dark;
@@ -278,7 +278,7 @@
     <header class="topbar">
       <div class="brand">
         <div class="brand-mark" aria-hidden="true"></div>
-        <div><div class="brand-name">Jarvis</div><div class="brand-sub">Personal systems interface</div></div>
+        <div><div class="brand-name">Computer</div><div class="brand-sub">Personal systems interface</div></div>
       </div>
       <div class="top-meta">
         <span class="local-label">LOCAL SESSION</span>
@@ -349,13 +349,13 @@
                 <input class="security-site-url" id="security-site-url" type="url" placeholder="Authorized HTTPS domain" aria-label="Authorized HTTPS domain to check">
                 <button class="security-button" id="security-site-check" type="submit">Check headers</button>
               </form>
-              <div class="security-note">Self-audit checks Jarvis only. Package audit sends installed package names and versions to the public advisory service.</div>
+              <div class="security-note">Self-audit checks Computer only. Package audit sends installed package names and versions to the public advisory service.</div>
               <div class="security-results" id="security-results" aria-live="polite"></div>
             </section>
             <section class="code-workbench" aria-label="Code workbench">
               <div class="code-workbench-title">Code workbench</div>
               <div class="code-workbench-note" id="code-workbench-location">Loading code workspace...</div>
-              <div class="code-workbench-note">Lua, PHP, JavaScript, C/C++, Python. Drafts use local Ollama, show a diff, and are never executed. Jarvis core files stay outside this workspace.</div>
+              <div class="code-workbench-note">Lua, PHP, JavaScript, C/C++, Python. Drafts use local Ollama, show a diff, and are never executed. Computer core files stay outside this workspace.</div>
               <form class="code-workbench-form" id="code-workbench-form">
                 <input class="code-path" id="code-path" type="text" maxlength="500" placeholder="Project-relative path, e.g. hello.lua" aria-label="Project-relative source file path">
                 <textarea class="code-instruction" id="code-instruction" maxlength="2000" placeholder="Describe the change you want..." aria-label="Requested source change"></textarea>
@@ -370,7 +370,7 @@
           </div>
         </section>
 
-        <section class="panel chat-panel" aria-label="Jarvis conversation">
+        <section class="panel chat-panel" aria-label="Computer conversation">
           <div class="chat-header">
             <span class="panel-title">Conversation</span>
             <span class="model-badge" id="model-badge" title="Checking configured AI provider">AI / CHECKING</span>
@@ -378,8 +378,8 @@
           </div>
           <div class="conversation" id="conversation" aria-live="polite" aria-relevant="additions">
             <div class="message">
-              <div class="message-mark">J</div>
-              <div><div class="message-meta">Jarvis / now</div><div class="message-text">Systems are online. Ask a question, request current information, or say “remember that…” to save a note for later. Say “help” for details.</div></div>
+              <div class="message-mark">C</div>
+              <div><div class="message-meta">Computer / now</div><div class="message-text">Systems are online. Ask a question, request current information, or say “remember that…” to save a note for later. Say “help” for details.</div></div>
             </div>
           </div>
           <div class="quick-actions">
@@ -393,13 +393,13 @@
           </div>
           <form class="composer" id="command-form">
             <div class="input-row">
-              <input class="command-input" id="command-input" type="text" maxlength="1000" placeholder="Ask, or say “remember that…”" autocomplete="off" aria-label="Message Jarvis">
+              <input class="command-input" id="command-input" type="text" maxlength="1000" placeholder="Ask, or say “remember that…”" autocomplete="off" aria-label="Message Computer">
               <button class="icon-button" id="voice-button" type="button" aria-label="Start voice input" title="Start voice input" aria-pressed="false">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"></rect><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3m-4 0h8"></path></svg>
               </button>
               <button class="send-button" type="submit">Send</button>
             </div>
-            <div class="voice-note" id="voice-note">Voice recognition availability depends on your browser. Microphone access is requested only when you press the mic button.</div>
+            <div class="voice-note" id="voice-note">Press the microphone, then say "Computer" followed by your request. Speech recognition may use your browser's service.</div>
             <div class="provider-row">
               <label class="provider-label" for="provider-select">AI provider</label>
               <select class="provider-select" id="provider-select" aria-label="Choose an AI provider for this message">
@@ -426,7 +426,7 @@
     </div>
   </dialog>
   <dialog class="rules-dialog" id="rules-dialog" aria-labelledby="rules-dialog-title">
-    <h2 id="rules-dialog-title">Jarvis hard rules</h2>
+    <h2 id="rules-dialog-title">Computer hard rules</h2>
     <p class="rules-description">These owner-authored instructions are sent to the local model ahead of conversation and web content. Webpages and quoted text cannot replace them. Model/runtime safety limits still apply.</p>
     <label class="rules-label" for="hard-rules-input">Owner rules</label>
     <textarea class="rules-input" id="hard-rules-input" maxlength="8000" spellcheck="true"></textarea>
@@ -435,7 +435,7 @@
   </dialog>
   <dialog class="rules-dialog" id="knowledge-note-dialog" aria-labelledby="knowledge-note-title">
     <h2 id="knowledge-note-title">Save a knowledge note</h2>
-    <p class="rules-description">Paste useful reference text or an answer from another AI. Jarvis stores it locally for retrieval; this does not train the language model.</p>
+    <p class="rules-description">Paste useful reference text or an answer from another AI. Computer stores it locally for retrieval; this does not train the language model.</p>
     <label class="rules-label" for="knowledge-note-title-input">Source title</label>
     <input class="knowledge-url" id="knowledge-note-title-input" maxlength="300" placeholder="e.g. Lua coroutine reference">
     <label class="rules-label" for="knowledge-note-content">Reference text</label>
@@ -445,7 +445,19 @@
   </dialog>
   <dialog class="rules-dialog settings-dialog" id="settings-dialog" aria-labelledby="settings-title">
     <h2 id="settings-title">Connections and workspace</h2>
-    <p class="rules-description">Credentials are encrypted in this Windows user account and never sent back to the browser. Choose exactly what Jarvis may connect to.</p>
+    <p class="rules-description">Credentials are encrypted on the Computer server and never sent back to the browser.</p>
+    <section class="settings-section" aria-label="User accounts">
+      <h3>User accounts</h3>
+      <div id="user-list"></div>
+      <form class="settings-form" id="user-form">
+        <label class="rules-label" for="new-username">Username</label>
+        <input class="settings-input" id="new-username" autocomplete="off" required maxlength="64">
+        <label class="rules-label" for="new-password">Password (at least 12 characters)</label>
+        <input class="settings-input" id="new-password" type="password" autocomplete="new-password" required minlength="12" maxlength="1024">
+        <div class="settings-actions"><button class="security-button" type="submit">Add user</button><button class="security-button" id="logout-button" type="button">Sign out</button></div>
+      </form>
+      <div class="settings-status" id="user-status" aria-live="polite"></div>
+    </section>
     <section class="settings-section" aria-label="AI provider settings">
       <h3>AI providers</h3>
       <label class="settings-toggle"><input id="external-ai-enabled" type="checkbox"><span>Allow hosted AI providers</span></label>
@@ -507,6 +519,10 @@
     const recognitionType = window.SpeechRecognition || window.webkitSpeechRecognition;
     const recognition = recognitionType ? new recognitionType() : null;
     let isListening = false;
+    let voiceEnabled = false;
+    let awaitingVoiceCommand = false;
+    let voiceRestartTimer = null;
+    let voiceCommandTimer = null;
     const conversationHistory = [];
     let aiStatus = null;
     let resolveActionConfirmation = null;
@@ -604,6 +620,7 @@
     }
 
     async function refreshSettings() {
+      await refreshUsers();
       const response = await fetch('/api/settings');
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Settings could not be loaded.');
@@ -646,6 +663,59 @@
       }
     });
     document.getElementById('settings-close').addEventListener('click', () => settingsDialog.close());
+    async function refreshUsers() {
+      const response = await fetch('/api/settings/users');
+      if (response.status === 401) { window.location.assign('/login'); return; }
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not load users.');
+      const list = document.getElementById('user-list');
+      list.replaceChildren();
+      data.users.forEach((username) => {
+        const row = document.createElement('div');
+        row.className = 'settings-actions';
+        const name = document.createElement('span');
+        name.textContent = username === data.current_user ? `${username} (you)` : username;
+        const remove = document.createElement('button');
+        remove.className = 'security-button';
+        remove.type = 'button';
+        remove.textContent = 'Remove';
+        remove.disabled = data.users.length === 1;
+        remove.addEventListener('click', async () => {
+          if (!window.confirm(`Remove ${username} and end their sessions?`)) return;
+          try {
+            const result = await fetch(`/api/settings/users/${encodeURIComponent(username)}`, { method: 'DELETE' });
+            const body = await result.json();
+            if (!result.ok) throw new Error(body.error || 'Could not remove user.');
+            if (username === data.current_user) { window.location.assign('/login'); return; }
+            await refreshUsers();
+          } catch (error) { document.getElementById('user-status').textContent = error.message; }
+        });
+        row.append(name, remove);
+        list.append(row);
+      });
+    }
+    document.getElementById('user-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const status = document.getElementById('user-status');
+      try {
+        const response = await fetch('/api/settings/users', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: document.getElementById('new-username').value, password: document.getElementById('new-password').value })
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Could not add user.');
+        event.target.reset();
+        await refreshUsers();
+        status.textContent = 'User added.';
+      } catch (error) { status.textContent = error.message; }
+    });
+    document.getElementById('logout-button').addEventListener('click', async () => {
+      try {
+        const response = await fetch('/api/logout', { method: 'POST' });
+        if (!response.ok) throw new Error('Could not sign out.');
+        window.location.assign('/login');
+      } catch (error) { document.getElementById('user-status').textContent = error.message; }
+    });
     providerConfigSelect.addEventListener('change', updateAiProviderForm);
 
     document.getElementById('ai-provider-form').addEventListener('submit', async (event) => {
@@ -767,6 +837,7 @@
 
     if (recognition) {
       recognition.lang = 'en-US';
+      recognition.continuous = true;
       recognition.interimResults = false;
       recognition.maxAlternatives = 1;
     } else {
@@ -781,8 +852,19 @@
       isListening = listening;
       voiceButton.setAttribute('aria-pressed', String(listening));
       voiceButton.title = listening ? 'Stop voice input' : 'Start voice input';
+      voiceButton.setAttribute('aria-label', voiceButton.title);
       document.getElementById('assistant-state').textContent = listening ? 'LISTENING' : 'READY';
-      document.getElementById('core-caption').textContent = listening ? 'Listening for your instruction' : 'Awaiting your instruction';
+      document.getElementById('core-caption').textContent = listening ? 'Listening for Computer' : 'Awaiting your instruction';
+    }
+
+    function voiceCommandFromTranscript(transcript, awaitingCommand) {
+      const text = transcript.trim();
+      const wake = text.match(/^computer\b[\s,.:;!?-]*/i);
+      if (wake) {
+        const command = text.slice(wake[0].length).trim();
+        return { command, awaitingCommand: !command };
+      }
+      return { command: awaitingCommand ? text : '', awaitingCommand: awaitingCommand && !text };
     }
 
     function addMessage(role, text, source = '', sources = []) {
@@ -790,11 +872,11 @@
       message.className = `message ${role}`;
       const mark = document.createElement('div');
       mark.className = 'message-mark';
-      mark.textContent = role === 'user' ? 'Y' : 'J';
+      mark.textContent = role === 'user' ? 'Y' : 'C';
       const body = document.createElement('div');
       const meta = document.createElement('div');
       meta.className = 'message-meta';
-      meta.textContent = role === 'user' ? 'You / now' : `Jarvis / ${source || 'now'}`;
+      meta.textContent = role === 'user' ? 'You / now' : `Computer / ${source || 'now'}`;
       const content = document.createElement('div');
       content.className = 'message-text';
       content.textContent = text;
@@ -887,10 +969,10 @@
           window.speechSynthesis.speak(new SpeechSynthesisUtterance(data.reply));
         }
       } catch (error) {
-        addMessage('assistant', `Connection error: ${error.message}. Check that Jarvis is running at localhost:5000.`);
+        addMessage('assistant', `Connection error: ${error.message}. Check that Computer is running at localhost:5000.`);
       } finally {
-        document.getElementById('assistant-state').textContent = 'READY';
-        document.getElementById('core-caption').textContent = 'Awaiting your instruction';
+        document.getElementById('assistant-state').textContent = isListening ? 'LISTENING' : 'READY';
+        document.getElementById('core-caption').textContent = isListening ? 'Listening for Computer' : 'Awaiting your instruction';
       }
     }
 
@@ -948,7 +1030,7 @@
         : `${service.replace('_', ' ')} for ${entityId}`;
       const confirmed = await new Promise((resolve) => {
         resolveActionConfirmation = resolve;
-        document.getElementById('action-dialog-description').textContent = `Jarvis requests: ${description}. Nothing will be sent until you confirm.`;
+        document.getElementById('action-dialog-description').textContent = `Computer requests: ${description}. Nothing will be sent until you confirm.`;
         document.getElementById('action-dialog').showModal();
       });
       if (!confirmed) {
@@ -1254,7 +1336,7 @@
       const button = document.getElementById('security-self-audit');
       const summary = document.getElementById('security-summary');
       button.disabled = true;
-      summary.textContent = 'Checking Jarvis...';
+      summary.textContent = 'Checking Computer...';
       try {
         const response = await fetch('/api/security/self-audit');
         const data = await response.json();
@@ -1380,7 +1462,7 @@
     codeApplyButton.addEventListener('click', async () => {
       if (!currentCodeDraftId) return;
       const path = document.getElementById('code-path').value.trim();
-      if (!window.confirm(`Apply the reviewed diff to ${path}? Jarvis will create a backup and will not execute the code.`)) return;
+      if (!window.confirm(`Apply the reviewed diff to ${path}? Computer will create a backup and will not execute the code.`)) return;
       codeApplyButton.disabled = true;
       codeStatus.textContent = 'Applying reviewed diff and creating backup...';
       try {
@@ -1393,7 +1475,7 @@
         if (!response.ok) throw new Error(data.error || 'Could not apply the reviewed diff.');
         currentCodeDraftId = null;
         codeDiff.classList.add('hidden');
-        codeStatus.textContent = `Applied. Backup: ${data.backup}.${data.restart_required ? ' Restart Jarvis to load this backend change.' : ''}`;
+        codeStatus.textContent = `Applied. Backup: ${data.backup}.${data.restart_required ? ' Restart Computer to load this backend change.' : ''}`;
       } catch (error) {
         codeStatus.textContent = error.message;
         codeApplyButton.disabled = false;
@@ -1411,27 +1493,68 @@
 
     voiceButton.addEventListener('click', () => {
       if (!recognition) return;
-      if (isListening) {
-        recognition.stop();
+      if (voiceEnabled) {
+        voiceEnabled = false;
+        awaitingVoiceCommand = false;
+        clearTimeout(voiceRestartTimer);
+        clearTimeout(voiceCommandTimer);
+        if (isListening) recognition.stop();
+        setListening(false);
         return;
       }
       try {
+        voiceEnabled = true;
         recognition.start();
       } catch (error) {
+        voiceEnabled = false;
         setListening(false);
         addMessage('assistant', 'Voice input could not start. Check microphone permission and try again.');
       }
     });
 
     if (recognition) {
-      recognition.onstart = () => setListening(true);
-      recognition.onend = () => setListening(false);
+      recognition.onstart = () => {
+        if (!voiceEnabled) { recognition.stop(); return; }
+        setListening(true);
+      };
+      recognition.onend = () => {
+        setListening(false);
+        if (voiceEnabled) {
+          voiceRestartTimer = setTimeout(() => {
+            if (!voiceEnabled) return;
+            try { recognition.start(); } catch (error) {
+              voiceEnabled = false;
+              addMessage('assistant', 'Voice input could not restart. Check microphone permission and try again.');
+            }
+          }, 300);
+        }
+      };
       recognition.onresult = (event) => {
-        const transcript = event.results[0][0].transcript;
-        commandInput.value = transcript;
-        sendCommand(transcript);
+        if (!voiceEnabled) return;
+        for (let index = event.resultIndex; index < event.results.length; index += 1) {
+          if (!event.results[index].isFinal) continue;
+          const result = voiceCommandFromTranscript(event.results[index][0].transcript, awaitingVoiceCommand);
+          awaitingVoiceCommand = result.awaitingCommand;
+          if (result.command) {
+            clearTimeout(voiceCommandTimer);
+            commandInput.value = result.command;
+            sendCommand(result.command);
+          } else if (awaitingVoiceCommand) {
+            document.getElementById('core-caption').textContent = 'Listening for your instruction';
+            clearTimeout(voiceCommandTimer);
+            voiceCommandTimer = setTimeout(() => {
+              awaitingVoiceCommand = false;
+              if (voiceEnabled) document.getElementById('core-caption').textContent = 'Listening for Computer';
+            }, 10000);
+          }
+        }
       };
       recognition.onerror = (event) => {
+        if (!voiceEnabled) return;
+        if (event.error === 'no-speech') return;
+        voiceEnabled = false;
+        awaitingVoiceCommand = false;
+        clearTimeout(voiceCommandTimer);
         setListening(false);
         const detail = event.error === 'not-allowed' ? 'Microphone permission was denied.' : `Voice input error: ${event.error}.`;
         addMessage('assistant', detail);
@@ -1806,7 +1929,7 @@
         });
       } catch (error) {
         host.classList.add('globe-unavailable');
-        console.warn('Jarvis holographic globe could not initialize.', error);
+        console.warn('Computer holographic globe could not initialize.', error);
       }
     }
   </script>

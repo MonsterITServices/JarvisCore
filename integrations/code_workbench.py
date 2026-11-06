@@ -93,7 +93,7 @@ def workspace_root():
         raise CodeWorkbenchError("The configured code workspace must be a directory.")
     jarvis_root = _JARVIS_ROOT.resolve(strict=True)
     if root == jarvis_root or root.is_relative_to(jarvis_root) or jarvis_root.is_relative_to(root):
-        raise CodeWorkbenchError("The code workspace must be separate from the Jarvis application folder.")
+        raise CodeWorkbenchError("The code workspace must be separate from the Computer application folder.")
     return root
 
 
@@ -108,19 +108,19 @@ def configure_workspace_root(configured_path):
     root = requested.resolve(strict=False)
     jarvis_root = _JARVIS_ROOT.resolve(strict=True)
     if root == Path(root.anchor) or root == jarvis_root or root.is_relative_to(jarvis_root) or jarvis_root.is_relative_to(root):
-        raise CodeWorkbenchError("Choose a workspace folder separate from the Jarvis application and filesystem root.")
+        raise CodeWorkbenchError("Choose a workspace folder separate from the Computer application and filesystem root.")
     windows_root = Path(os.environ.get("WINDIR", "C:/Windows")).resolve(strict=False)
     if os.name == "nt" and (root == windows_root or root.is_relative_to(windows_root)):
         raise CodeWorkbenchError("The Windows system folder cannot be used as a code workspace.")
     try:
         root.mkdir(parents=True, exist_ok=True)
     except OSError as error:
-        raise CodeWorkbenchError("Jarvis could not create or access that workspace folder.") from error
+        raise CodeWorkbenchError("Computer could not create or access that workspace folder.") from error
     if not root.is_dir() or root.is_symlink():
         raise CodeWorkbenchError("The editable workspace must be a real folder, not a symbolic link.")
     if not os.access(root, os.W_OK | os.X_OK):
         raise CodeWorkbenchError(
-            "The Jarvis service cannot write to that folder. On Ubuntu, grant access with the owner/group and a systemd ReadWritePaths entry."
+            "The Computer service cannot write to that folder. On Ubuntu, grant access with the owner/group and a systemd ReadWritePaths entry."
         )
 
     with _DRAFT_LOCK:
@@ -151,7 +151,7 @@ def configure_workspace_root(configured_path):
                 temporary_file.write("\n")
             os.replace(temporary_path, _RULES_PATH)
         except OSError as error:
-            raise CodeWorkbenchError("Jarvis could not save the workspace folder setting.") from error
+            raise CodeWorkbenchError("Computer could not save the workspace folder setting.") from error
         finally:
             if temporary_path and temporary_path.exists():
                 temporary_path.unlink()
@@ -213,7 +213,7 @@ def _library_references(language, instruction, relative_path):
 
 def _generate_revision(language, instruction, current_source, owner_rules, references=""):
     if os.environ.get("JARVIS_AI_PROVIDER", "ollama").strip().lower() != "ollama":
-        raise CodeWorkbenchError("Code drafting is disabled unless Jarvis is using its local Ollama model.")
+        raise CodeWorkbenchError("Code drafting is disabled unless Computer is using its local Ollama model.")
     model = os.environ.get("JARVIS_OLLAMA_MODEL", "qwen3-coder:30b").strip()
     system_prompt = (
         f"You are editing a {language} source file for the owner of this local project. "
@@ -330,7 +330,7 @@ def apply_draft(draft_id):
     try:
         source_path.parent.mkdir(parents=True, exist_ok=True)
     except OSError as error:
-        raise CodeWorkbenchError("Jarvis could not create the requested project folders.") from error
+        raise CodeWorkbenchError("Computer could not create the requested project folders.") from error
     normalized_after_create, validated_path, _, _ = _validated_path(draft["path"])
     if normalized_after_create != normalized or validated_path != source_path:
         raise CodeWorkbenchError("The project path changed while preparing the reviewed revision.")

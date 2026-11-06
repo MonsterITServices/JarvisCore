@@ -19,7 +19,7 @@ def run_jarvis_self_audit(app, server_host, rules):
     checks.append(_check(
         "Network binding",
         "pass" if server_host == "127.0.0.1" else "fail",
-        "Jarvis listens on loopback only." if server_host == "127.0.0.1" else "Jarvis is configured to listen beyond this computer.",
+        "Computer listens on loopback only." if server_host == "127.0.0.1" else "Computer is configured to listen beyond this computer.",
     ))
     debug_enabled = bool(app.debug or app.config.get("DEBUG", False))
     checks.append(_check(
@@ -40,7 +40,7 @@ def run_jarvis_self_audit(app, server_host, rules):
     checks.append(_check(
         "On-demand internet access",
         "review" if external_access else "pass",
-        "External HTTPS page reads and configured web search are enabled only through explicit Jarvis requests."
+        "External HTTPS page reads and configured web search are enabled only through explicit Computer requests."
         if external_access else "External access is disabled by config/rules.json.",
     ))
 
@@ -102,7 +102,7 @@ def run_jarvis_self_audit(app, server_host, rules):
     ))
 
     return {
-        "scope": "This Jarvis installation only; no host discovery, external target probes, or exploit tests are run.",
+        "scope": "This Computer installation only; no host discovery, external target probes, or exploit tests are run.",
         "checks": checks,
         "passed": sum(check["status"] == "pass" for check in checks),
         "review": sum(check["status"] == "review" for check in checks),

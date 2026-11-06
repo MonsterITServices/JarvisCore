@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in | Computer</title>
+  <style>
+    :root { color-scheme: dark; font-family: "Trebuchet MS", sans-serif; background: #071119; color: #e5f4f6; }
+    * { box-sizing: border-box; }
+    body { min-height: 100vh; margin: 0; display: grid; place-items: center; padding: 24px; background: radial-gradient(ellipse at 50% 20%, #123540, #071119 70%); }
+    main { width: min(100%, 380px); }
+    .brand { color: #83dbe8; text-transform: uppercase; font-size: 13px; font-weight: bold; letter-spacing: 0; }
+    h1 { font-size: 32px; margin: 20px 0 8px; }
+    p { color: #a7bdc3; line-height: 1.5; }
+    form { display: grid; gap: 12px; margin-top: 28px; }
+    label { color: #b7cdd2; font-size: 13px; }
+    input, button { width: 100%; min-height: 44px; border-radius: 4px; font: inherit; }
+    input { border: 1px solid #41616a; padding: 10px 12px; background: #0c202a; color: #fff; }
+    input:focus-visible, button:focus-visible { outline: 2px solid #85e4ed; outline-offset: 2px; }
+    button { border: 0; margin-top: 8px; background: #8be1e6; color: #06222a; font-weight: bold; cursor: pointer; }
+    #status { min-height: 24px; color: #ffb6a8; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="brand">Computer / Personal systems</div>
+    <h1>Sign in</h1>
+    <p>Access your Computer account.</p>
+    <form id="login-form">
+      <label for="username">Username</label>
+      <input id="username" name="username" autocomplete="username" required maxlength="64" autofocus>
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" required maxlength="1024">
+      <button type="submit">Sign in</button>
+      <div id="status" role="alert"></div>
+    </form>
+  </main>
+  <script>
+    document.getElementById('login-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const status = document.getElementById('status');
+      const button = event.currentTarget.querySelector('button');
+      button.disabled = true;
+      status.textContent = 'Signing in...';
+      try {
+        const response = await fetch('/api/login', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: document.getElementById('username').value, password: document.getElementById('password').value })
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Sign in failed.');
+        window.location.assign('/');
+      } catch (error) {
+        status.textContent = error.message;
+        button.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
