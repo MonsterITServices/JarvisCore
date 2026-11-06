@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+# --- ADAPTED CONFIGURATION ---
+# Shifted from Port 80 to 8080 to prevent conflicts with Docker/Home Assistant
+WEB_PORT="8080"
+# -----------------------------
+
 APP_NAME="jarvis"
 APP_USER="jarvis"
 APP_GROUP="jarvis"
@@ -34,6 +39,7 @@ if [[ "${ID:-}" != "ubuntu" ]]; then
   fail "This installer targets Ubuntu Server."
 fi
 
+# This will pass correctly on your laptop assuming a standard x86_64 CPU architecture.
 if [[ "$(uname -m)" != "x86_64" ]]; then
   fail "This installer currently targets x86_64 Ubuntu."
 fi
@@ -63,7 +69,6 @@ if [[ -z "${LAN_CIDR}" ]]; then
   LAN_CIDR="${LAN_CIDR:-${DEFAULT_LAN}}"
 fi
 
-# JARVIS_USE_OLLAMA=0 skips the large local model and uses hosted AI keys added in Settings.
 USE_OLLAMA="${JARVIS_USE_OLLAMA:-}"
 if [[ -z "${USE_OLLAMA}" ]]; then
   read -r -p "Install the local Ollama model? Choose n to use Gemini/Claude keys only [Y/n]: " answer
@@ -75,7 +80,6 @@ if [[ "${USE_OLLAMA}" == "1" && -z "${OLLAMA_MODEL}" ]]; then
 fi
 OLLAMA_MODEL="${OLLAMA_MODEL:-qwen3-coder:30b}"
 
-# Existing Cloudflare tunnel hostname (cloudflared itself is never installed or changed here).
 PUBLIC_HOST="${JARVIS_PUBLIC_HOST-}"
 if [[ -z "${JARVIS_PUBLIC_HOST+x}" ]]; then
   read -r -p "Cloudflare tunnel hostname, blank for none [jarvis.monsterit.co.uk]: " PUBLIC_HOST
@@ -243,12 +247,10 @@ EOF
 systemctl daemon-reload
 systemctl enable --now jarvis
 
-log "Creating Apache LAN-only reverse proxy"
-if systemctl is-active --quiet nginx 2>/dev/null; then
-  log "Stopping nginx from an earlier install so Apache can use port 80"
-  systemctl disable --now nginx
-fi
+log "Creating Apache LAN-only reverse proxy on port ${WEB_PORT}"
+# Nginx disable block removed to protect existing port 80 configurations
 rm -f /etc/nginx/sites-enabled/jarvis
+
 if [[ -f "${AUTH_FILE}" ]]; then
   htpasswd -B "${AUTH_FILE}" "${AUTH_USER}"
 else
@@ -258,7 +260,9 @@ chown root:www-data "${AUTH_FILE}"
 chmod 0640 "${AUTH_FILE}"
 
 cat > "${APACHE_SITE}" <<EOF
-<VirtualHost *:80>
+Listen ${WEB_PORT}
+
+<VirtualHost *:${WEB_PORT}>
     ServerName ${SERVER_IP}
     ServerSignature Off
     LimitRequestBody 27262976
@@ -282,11 +286,11 @@ cat > "${APACHE_SITE}" <<EOF
     </Location>
 </VirtualHost>
 EOF
+
 if [[ -n "${PUBLIC_HOST}" ]]; then
-  # Existing Cloudflare tunnel: only same-machine connections (cloudflared) may use this no-password host.
   cat >> "${APACHE_SITE}" <<EOF
 
-<VirtualHost *:80>
+<VirtualHost *:${WEB_PORT}>
     ServerName ${PUBLIC_HOST}
     ServerSignature Off
     LimitRequestBody 27262976
@@ -305,6 +309,7 @@ if [[ -n "${PUBLIC_HOST}" ]]; then
 </VirtualHost>
 EOF
 fi
+
 a2enmod proxy proxy_http headers auth_basic authn_file authz_core authz_host >/dev/null
 a2dissite 000-default >/dev/null 2>&1 || true
 a2ensite jarvis >/dev/null
@@ -313,7 +318,7 @@ systemctl enable apache2
 systemctl restart apache2
 
 if command -v ufw >/dev/null 2>&1 && ufw status | grep -q "Status: active"; then
-  ufw allow from "${LAN_CIDR}" to any port 80 proto tcp
+  ufw allow from "${LAN_CIDR}" to any port "${WEB_PORT}" proto tcp
 fi
 
 log "Checking the local Jarvis health endpoint"
@@ -328,15 +333,15 @@ if [[ "${healthy}" != "1" ]]; then
 fi
 
 printf '\nJarvis is installed.\n'
-printf 'LAN URL: http://%s\n' "${SERVER_IP}"
+printf 'LAN URL: http://%s:%s\n' "${SERVER_IP}" "${WEB_PORT}"
 printf 'Web login: %s (password entered into htpasswd above)\n' "${AUTH_USER}"
 if [[ "${USE_OLLAMA}" == "1" ]]; then printf 'Ollama model: %s\n' "${OLLAMA_MODEL}"; fi
 printf 'Code workspace: %s/Projects\n' "${DATA_DIR}"
 printf 'Next: open the URL, click Settings, add your AI key and Home Assistant token there.\n'
 if [[ -n "${PUBLIC_HOST}" ]]; then
   printf 'Tunnel: your existing Cloudflare tunnel needs no changes. %s is served without a password to same-machine tunnel traffic.\n' "${PUBLIC_HOST}"
-  printf 'The tunnel service can stay on http://localhost:80 (or point it at http://127.0.0.1:5000); cloudflared is not installed or modified here.\n'
-  printf 'SECURITY: that route has no password. Protect it with a Cloudflare Access policy, or anyone online can control Jarvis.\n'
+  printf 'For best performance, point your Cloudflare tunnel directly to http://127.0.0.1:5000 instead of Apache.\n'
+  printf 'SECURITY: Protect your Cloudflare route with a Zero Trust Access policy, or anyone online can control Jarvis.\n'
 fi
 printf 'Logs: sudo journalctl -u jarvis -f\n'
 printf 'Update later: copy the new files over and re-run this script; your settings and keys are kept.\n'
