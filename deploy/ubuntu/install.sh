@@ -1,11 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# --- ADAPTED CONFIGURATION ---
-# Shifted from Port 80 to 8080 to prevent conflicts with Docker/Home Assistant
 WEB_PORT="8080"
-# -----------------------------
-
 APP_NAME="jarvis"
 APP_USER="jarvis"
 APP_GROUP="jarvis"
@@ -16,42 +12,13 @@ ENV_FILE="/etc/jarvis.env"
 SERVICE_FILE="/etc/systemd/system/jarvis.service"
 APACHE_SITE="/etc/apache2/sites-available/jarvis.conf"
 
-log() {
-  printf '\n[Computer] %s\n' "$1"
-}
+log() { printf '\n[Jarvis] %s\n' "$1"; }
+fail() { printf '\n[Jarvis] ERROR: %s\n' "$1" >&2; exit 1; }
 
-fail() {
-  printf '\n[Computer] ERROR: %s\n' "$1" >&2
-  exit 1
-}
-
-if [[ "${EUID}" -ne 0 ]]; then
-  fail "Run with sudo: sudo bash deploy/ubuntu/install.sh"
-fi
-
-if [[ ! -r /etc/os-release ]]; then
-  fail "Cannot identify this operating system."
-fi
-
-. /etc/os-release
-if [[ "${ID:-}" != "ubuntu" ]]; then
-  fail "This installer targets Ubuntu Server."
-fi
-
-# This will pass correctly on your laptop assuming a standard x86_64 CPU architecture.
-if [[ "$(uname -m)" != "x86_64" ]]; then
-  fail "This installer currently targets x86_64 Ubuntu."
-fi
+if [[ "${EUID}" -ne 0 ]]; then fail "Run with sudo: sudo bash deploy/ubuntu/install.sh"; fi
 
 SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-if [[ ! -f "${SOURCE_DIR}/app.py" || ! -f "${SOURCE_DIR}/requirements.txt" ]]; then
-  fail "Run this script from the copied Computer repository under deploy/ubuntu/."
-fi
-
-if ! command -v python3 >/dev/null 2>&1 || ! python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)'; then
-  fail "Python 3.10 or newer is required (Ubuntu 22.04 or newer)."
-fi
-PYTHON_IS_311="$(python3 -c 'import sys; print(1 if sys.version_info >= (3, 11) else 0)')"
+if [[ ! -f "${SOURCE_DIR}/app.py" ]]; then fail "Run from the copied Jarvis repository."; fi
 
 DEFAULT_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
 DEFAULT_IP="${DEFAULT_IP:-192.168.1.50}"
@@ -68,45 +35,19 @@ if [[ -z "${LAN_CIDR}" ]]; then
   LAN_CIDR="${LAN_CIDR:-${DEFAULT_LAN}}"
 fi
 
-USE_OLLAMA="${JARVIS_USE_OLLAMA:-}"
-if [[ -z "${USE_OLLAMA}" ]]; then
-  read -r -p "Install the local Ollama model? Choose n to use Gemini/Claude keys only [Y/n]: " answer
-  case "${answer:-Y}" in [nN]*) USE_OLLAMA=0 ;; *) USE_OLLAMA=1 ;; esac
-fi
-OLLAMA_MODEL="${JARVIS_OLLAMA_MODEL:-}"
-if [[ "${USE_OLLAMA}" == "1" && -z "${OLLAMA_MODEL}" ]]; then
-  read -r -p "Ollama model [qwen3-coder:30b]: " OLLAMA_MODEL
-fi
-OLLAMA_MODEL="${OLLAMA_MODEL:-qwen3-coder:30b}"
+USE_OLLAMA="${JARVIS_USE_OLLAMA:-0}"
+OLLAMA_MODEL="${JARVIS_OLLAMA_MODEL:-qwen3-coder:30b}"
 
 PUBLIC_HOST="${JARVIS_PUBLIC_HOST-}"
 if [[ -z "${JARVIS_PUBLIC_HOST+x}" ]]; then
   read -r -p "Cloudflare tunnel hostname, blank for none [jarvis.monsterit.co.uk]: " PUBLIC_HOST
   PUBLIC_HOST="${PUBLIC_HOST:-jarvis.monsterit.co.uk}"
 fi
-if [[ -n "${PUBLIC_HOST}" && ! "${PUBLIC_HOST}" =~ ^[a-zA-Z0-9.-]{1,253}$ ]]; then
-  fail "The tunnel hostname may contain letters, numbers, dot, and hyphen only."
-fi
-
-python3 - "${SERVER_IP}" "${LAN_CIDR}" <<'PY'
-import ipaddress
-import sys
-
-try:
-    address = ipaddress.ip_address(sys.argv[1])
-    network = ipaddress.ip_network(sys.argv[2], strict=False)
-except ValueError as error:
-    raise SystemExit(f"Invalid server IP or LAN CIDR: {error}")
-if address.version != 4 or network.version != 4:
-    raise SystemExit("This installer expects IPv4 addresses and CIDRs.")
-if address not in network:
-    raise SystemExit("The server IP must be inside the trusted LAN CIDR.")
-PY
 
 log "Installing Ubuntu packages"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
-apt-get install -y ca-certificates curl build-essential python3 python3-venv python3-dev apache2 apache2-utils
+apt-get install -y ca-certificates curl build-essential python3 python3-venv python3-dev apache2 apache2-utils rsync
 
 if ! id "${APP_USER}" >/dev/null 2>&1; then
   useradd --system --create-home --home-dir "${DATA_DIR}" --shell /usr/sbin/nologin "${APP_USER}"
@@ -117,17 +58,8 @@ install -d -o root -g "${APP_GROUP}" -m 2770 "${APP_DIR}/config"
 install -d -o root -g "${APP_GROUP}" -m 0750 "${APP_DIR}"
 install -d -o "${APP_USER}" -g "${APP_GROUP}" -m 0750 "${VENV_DIR}"
 
-log "Copying Computer application files"
-if ! command -v rsync >/dev/null 2>&1; then
-  apt-get install -y rsync
-fi
-rsync -a \
-  --exclude='.git/' \
-  --exclude='.venv/' \
-  --exclude='__pycache__/' \
-  --exclude='.jarvis_backups/' \
-  --exclude='config/rules.json' \
-  "${SOURCE_DIR}/" "${APP_DIR}/"
+log "Copying Jarvis application files"
+rsync -a --exclude='.git/' --exclude='.venv/' --exclude='__pycache__/' --exclude='config/rules.json' "${SOURCE_DIR}/" "${APP_DIR}/"
 
 if [[ ! -f "${APP_DIR}/config/rules.json" ]]; then
   install -o "${APP_USER}" -g "${APP_GROUP}" -m 0660 "${SOURCE_DIR}/config/rules.json" "${APP_DIR}/config/rules.json"
@@ -135,34 +67,6 @@ fi
 chown -R root:"${APP_GROUP}" "${APP_DIR}"
 chown root:"${APP_GROUP}" "${APP_DIR}/config"
 chmod 2770 "${APP_DIR}/config"
-chown "${APP_USER}":"${APP_GROUP}" "${APP_DIR}/config/rules.json"
-chmod 0660 "${APP_DIR}/config/rules.json"
-
-python3 - "${APP_DIR}/config/rules.json" "${DATA_DIR}/Projects" "${LAN_CIDR}" <<'PY'
-import json
-import os
-import sys
-import tempfile
-
-rules_path, workspace, lan_cidr = sys.argv[1:]
-with open(rules_path, encoding="utf-8") as source:
-    rules = json.load(source)
-rules.setdefault("security_policy", {})["trusted_networks"] = [lan_cidr]
-rules.setdefault("code_workbench", {})["workspace_root"] = workspace
-rules.setdefault("voice_activation", {})["keyword"] = "computer"
-rules.setdefault("assistant_profile", {})["name"] = "Computer"
-fd, temporary_path = tempfile.mkstemp(prefix="rules-", suffix=".tmp", dir=os.path.dirname(rules_path))
-try:
-    with os.fdopen(fd, "w", encoding="utf-8") as target:
-        json.dump(rules, target, ensure_ascii=False, indent=2)
-        target.write("\n")
-    os.replace(temporary_path, rules_path)
-finally:
-    if os.path.exists(temporary_path):
-        os.unlink(temporary_path)
-PY
-chown "${APP_USER}":"${APP_GROUP}" "${APP_DIR}/config/rules.json"
-chmod 0660 "${APP_DIR}/config/rules.json"
 
 log "Creating the local Python environment"
 if [[ ! -x "${VENV_DIR}/bin/python" ]]; then
@@ -171,31 +75,6 @@ if [[ ! -x "${VENV_DIR}/bin/python" ]]; then
 fi
 runuser -u "${APP_USER}" -- "${VENV_DIR}/bin/pip" install --upgrade pip
 runuser -u "${APP_USER}" -- "${VENV_DIR}/bin/pip" install -r "${APP_DIR}/requirements.txt"
-if [[ "${PYTHON_IS_311}" == "1" ]]; then
-  runuser -u "${APP_USER}" -- "${VENV_DIR}/bin/pip" install github-copilot-sdk \
-    || log "Optional GitHub Copilot support could not be installed; Gemini and Claude still work."
-fi
-
-log "Setting up the first Computer user"
-pushd "${APP_DIR}" >/dev/null
-runuser -u "${APP_USER}" -- env HOME="${DATA_DIR}" "${VENV_DIR}/bin/python" -m integrations.auth --bootstrap
-popd >/dev/null
-
-if [[ "${USE_OLLAMA}" == "1" ]]; then
-if ! command -v ollama >/dev/null 2>&1; then
-  log "Installing Ollama from its official installer"
-  curl --fail --show-error --location --proto '=https' --tlsv1.2 \
-    https://ollama.com/install.sh -o /tmp/jarvis-ollama-install.sh
-  bash /tmp/jarvis-ollama-install.sh
-  rm -f /tmp/jarvis-ollama-install.sh
-fi
-systemctl enable --now ollama
-
-log "Downloading the selected local language model: ${OLLAMA_MODEL}"
-ollama pull "${OLLAMA_MODEL}"
-else
-  log "Skipping Ollama; add a Gemini or Claude key in Computer Settings."
-fi
 
 if [[ ! -f "${ENV_FILE}" ]]; then
   install -o root -g "${APP_GROUP}" -m 0640 /dev/null "${ENV_FILE}"
@@ -203,25 +82,16 @@ if [[ ! -f "${ENV_FILE}" ]]; then
 HOME=${DATA_DIR}
 JARVIS_OLLAMA_MODEL=${OLLAMA_MODEL}
 JARVIS_KNOWLEDGE_DB=${DATA_DIR}/.local/share/jarviscore/knowledge.sqlite3
-BRAVE_SEARCH_API_KEY=
-JARVIS_HA_URL=
-JARVIS_HA_TOKEN=
 EOF
   chown root:"${APP_GROUP}" "${ENV_FILE}"
   chmod 0640 "${ENV_FILE}"
-else
-  log "Keeping existing ${ENV_FILE}; update JARVIS_OLLAMA_MODEL there if needed."
-fi
-sed -i '/^JARVIS_PUBLIC_ORIGIN=/d' "${ENV_FILE}"
-if [[ -n "${PUBLIC_HOST}" ]]; then
-  echo "JARVIS_PUBLIC_ORIGIN=https://${PUBLIC_HOST}" >> "${ENV_FILE}"
 fi
 
 log "Installing the systemd service"
 cat > "${SERVICE_FILE}" <<EOF
 [Unit]
-Description=Computer local AI assistant
-After=network-online.target ollama.service
+Description=Jarvis local AI assistant
+After=network-online.target
 Wants=network-online.target
 
 [Service]
@@ -246,15 +116,15 @@ ReadWritePaths=${APP_DIR}/config ${DATA_DIR}
 WantedBy=multi-user.target
 EOF
 systemctl daemon-reload
-systemctl enable jarvis
-systemctl restart jarvis
+systemctl enable --now jarvis
 
-log "Creating Apache LAN-only reverse proxy on port ${WEB_PORT}"
+log "Creating Apache reverse proxy on port ${WEB_PORT} (No Password)"
 cat > "${APACHE_SITE}" <<EOF
 Listen ${WEB_PORT}
 
 <VirtualHost *:${WEB_PORT}>
     ServerName ${SERVER_IP}
+    ServerAlias ${PUBLIC_HOST}
     ServerSignature Off
     LimitRequestBody 27262976
     ProxyPreserveHost On
@@ -262,70 +132,23 @@ Listen ${WEB_PORT}
     ProxyPass / http://127.0.0.1:5000/ timeout=240
     ProxyPassReverse / http://127.0.0.1:5000/
     RequestHeader set X-Forwarded-Proto "http"
-    Header always set X-Content-Type-Options "nosniff"
-    Header always set X-Frame-Options "DENY"
-    Header always set Referrer-Policy "no-referrer"
-
+    
     <Location />
-      Require ip ${LAN_CIDR}
+        Require all granted
     </Location>
 </VirtualHost>
 EOF
 
-if [[ -n "${PUBLIC_HOST}" ]]; then
-  cat >> "${APACHE_SITE}" <<EOF
-
-<VirtualHost *:${WEB_PORT}>
-    ServerName ${PUBLIC_HOST}
-    ServerSignature Off
-    LimitRequestBody 27262976
-    ProxyPreserveHost On
-    ProxyTimeout 240
-    ProxyPass / http://127.0.0.1:5000/ timeout=240
-    ProxyPassReverse / http://127.0.0.1:5000/
-    RequestHeader set X-Forwarded-Proto "https"
-    Header always set X-Content-Type-Options "nosniff"
-    Header always set X-Frame-Options "DENY"
-    Header always set Referrer-Policy "no-referrer"
-
-    <Location />
-        Require local
-    </Location>
-</VirtualHost>
-EOF
-fi
-
-a2enmod proxy proxy_http headers authz_core authz_host >/dev/null
-a2dissite 000-default >/dev/null 2>&1 || true
+a2enmod proxy proxy_http headers >/dev/null
 a2ensite jarvis >/dev/null
-apache2ctl configtest
-systemctl enable apache2
 systemctl restart apache2
 
-if command -v ufw >/dev/null 2>&1 && ufw status | grep -q "Status: active"; then
-  ufw allow from "${LAN_CIDR}" to any port "${WEB_PORT}" proto tcp
-fi
-
-log "Checking the local Computer login page"
-healthy=0
-for _ in $(seq 1 20); do
-  if curl --fail --silent http://127.0.0.1:5000/login >/dev/null; then healthy=1; break; fi
-  sleep 2
-done
-if [[ "${healthy}" != "1" ]]; then
-  journalctl -u jarvis -n 30 --no-pager || true
-  fail "Computer did not start. See the log above or run: sudo journalctl -u jarvis -f"
+log "Checking the local Jarvis health endpoint"
+sleep 2
+if ! curl --fail --silent http://127.0.0.1:5000/api/health >/dev/null; then
+  journalctl -u jarvis -n 20 --no-pager || true
+  fail "Jarvis did not start. See log above."
 fi
 
 printf '\nJarvis is installed.\n'
-printf 'LAN URL: http://%s:%s (sign-in requires HTTPS)\n' "${SERVER_IP}" "${WEB_PORT}"
-if [[ "${USE_OLLAMA}" == "1" ]]; then printf 'Ollama model: %s\n' "${OLLAMA_MODEL}"; fi
-printf 'Code workspace: %s/Projects\n' "${DATA_DIR}"
-printf 'Next: open the URL, click Settings, add your AI key and Home Assistant token there.\n'
-if [[ -n "${PUBLIC_HOST}" ]]; then
-  printf 'Sign in at https://%s; your existing Cloudflare tunnel is not changed.\n' "${PUBLIC_HOST}"
-  printf 'A Cloudflare Zero Trust Access policy is recommended as an extra security layer.\n'
-fi
-printf 'Logs: sudo journalctl -u jarvis -f\n'
-printf 'Update later: copy the new files over and re-run this script; your settings and keys are kept.\n'
-printf 'Do not port-forward this HTTP service to the public internet.\n'
+printf 'URL: http://%s:%s\n' "${SERVER_IP}" "${WEB_PORT}"
